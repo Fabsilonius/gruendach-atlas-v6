@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Wilhelmsburger Gründach-Atlas</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+/* ======================================================================
+   1. FARBEN — die einzige Stelle, an der Farben definiert werden.
+   ======================================================================
+   Übernommen aus Layout/farben.py, Palette "Bestand" (gewählt 04.09.2026).
+   Die Neutraltöne sind dort für alle Paletten identisch.
+
+   Diese Variablen gelten für die Oberfläche UND für die Karte: das
+   JavaScript liest sie unten über kartenfarbe() aus. Eine Farbe hier
+   ändern heißt also, sie überall zu ändern.
+
+   Palettenwechsel: Werte aus Layout/farben.py übertragen —
+   akzent1 -> --akzent, tint1 -> --akzent-tint, rampe[] -> --rampe-1..5.
+   ---------------------------------------------------------------------- */
+:root{
+
+  /* --- Neutraltöne (NEUTRAL in farben.py) --- */
+  --text:      #111111;   /* Fließtext, starke Rahmen */
+  --dunkel:    #444444;   /* Überschriften */
+  --grau:      #7A7A7A;   /* Sekundärtext, Standardrahmen */
+  --hell:      #BBBBBB;   /* inaktive Elemente */
+  --linie:     #E2E2E2;   /* Trennlinien, Raster */
+  --flaeche:   #F4F4F4;   /* neutrale Kastenfüllung */
+  --weiss:     #FFFFFF;
+
+  /* --- Akzent: Bestand (akzent1 / tint1) --- */
+  --akzent:      #2E6B3E;
+  --akzent-tint: #EEF4EF;
+
+  /* --- Gegenakzent (akzent2 / tint2) — Warnungen, Rückbau --- */
+  --gegen:      #B92518;
+  --gegen-tint: #F7F0EF;
+
+  /* --- Potenzial ---------------------------------------------------
+     Ocker/Orange. Das ist kategorial[3] der Palette "Bestand" — also
+     ein Ton, der im Farbsystem der Arbeit bereits vorkommt.
+     Alternativen, falls es kräftiger sein soll:
+       #A8563C  Terrakotta (aus Palette "Ziegel")
+       #B92518  Rot (= Gegenakzent; in farben.py ist akzent2 als
+                "Gegenpol, Potenzial" dokumentiert, wirkt in der Karte
+                aber wie eine Warnung)
+     ------------------------------------------------------------------ */
+  --potenzial:        #B7873A;
+  --potenzial-tint:   #F7F1E6;
+  --potenzial-kontur: #7A5623;   /* dunklere Variante für Umrisse */
+
+  /* --- Kartenrampe Begrünungsgrad (rampe[] in farben.py, hell -> dunkel)
+     Verwendet werden Stufe 3 bis 5; die hellen Stufen verschwinden auf
+     dem Luftbild. --- */
+  --rampe-1: #EEF4EF;
+  --rampe-2: #C9DDD0;
+  --rampe-3: #8FB89C;   /* Begrünungsgrad gering */
+  --rampe-4: #5A8F6B;   /* Begrünungsgrad mittel */
+  --rampe-5: #2E6B3E;   /* Begrünungsgrad hoch */
+
+  /* --- Umrisse der Flächen in der Karte ---
+     In v5 waren das #0b3d20, #65a30d und #475569. Hier stattdessen
+     jeweils eine abgedunkelte Variante der Füllfarbe, damit der Umriss
+     die Fläche stützt, statt eine zweite Farbe einzuführen. --- */
+  --kontur-gruendach: #1B4527;
+  --kontur-unklar:    #6E6E6E;
+
+  /* --- Maße --- */
+  --sidebar-breite: 340px;
+  --radius: 6px;
+}
+
+/* ======================================================================
+   2. TYPOGRAFIE UND GRUNDGERÜST
+   ======================================================================
+   Arial ist metrisch identisch zu der Helvetica der Abbildungen — siehe
+   Layout/FARBEN.md, Abschnitt "Neue Grafiken zeichnen".
+   ---------------------------------------------------------------------- */
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  font-family:Arial,Helvetica,"Helvetica Neue",sans-serif;
+  display:flex;height:100vh;overflow:hidden;
+  background:var(--weiss);color:var(--text);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* --- Seitenleiste --- */
+#sidebar{
+  width:var(--sidebar-breite);min-width:300px;height:100vh;
+  background:var(--weiss);border-right:1px solid var(--linie);
+  display:flex;flex-direction:column;overflow-y:auto;z-index:1000;
+}
+#sidebar-header{padding:20px 18px 14px;border-bottom:1px solid var(--linie)}
+#sidebar-header h1{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.2px}
+
+.section{padding:14px 18px;border-bottom:1px solid var(--linie)}
+.section:last-child{border-bottom:none}
+.section-title{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;
+  color:var(--grau);margin-bottom:10px;
+}
+.section-note{font-size:10.5px;color:var(--grau);margin-top:9px;line-height:1.55}
+
+/* --- Segmentierte Umschalter (Jahrgang, Ebene, Hintergrund) --- */
+.switch{display:flex;gap:0;border:1px solid var(--linie);border-radius:var(--radius);overflow:hidden}
+.switch button{
+  flex:1;padding:9px 6px;background:var(--weiss);border:none;
+  border-right:1px solid var(--linie);
+  color:var(--grau);font-family:inherit;font-size:12px;font-weight:700;
+  cursor:pointer;transition:background .12s,color .12s;text-align:center;
+}
+.switch button:last-child{border-right:none}
+.switch button small{display:block;font-size:9px;font-weight:400;color:var(--hell);margin-top:2px}
+.switch button:hover:not(.active){background:var(--flaeche)}
+.switch button.active{background:var(--akzent);color:var(--weiss)}
+.switch button.active small{color:rgba(255,255,255,.75)}
+/* Der Ebenen-Umschalter färbt sich in der Farbe der jeweiligen Ebene. */
+.switch.ebene button.active[data-ebene="pot"]{background:var(--potenzial)}
+.switch button:disabled{opacity:.4;cursor:not-allowed}
+
+/* --- Statistik --- */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-card{background:var(--flaeche);border-radius:var(--radius);padding:10px 11px}
+/* Eine ungerade Zahl von Kacheln: die letzte nimmt beide Spalten ein. */
+.stat-card.breit{grid-column:span 2}
+.stat-val{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.4px}
+.stat-lbl{font-size:10px;color:var(--grau);margin-top:2px;line-height:1.35}
+
+/* --- Legende --- */
+.legend-item{display:flex;align-items:center;gap:9px;font-size:11px;color:var(--text);margin-bottom:7px}
+.legend-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0;border:1px solid rgba(0,0,0,.18)}
+.legend-count{margin-left:auto;color:var(--grau);font-size:10px;font-variant-numeric:tabular-nums}
+
+/* --- Flächenknöpfe (Hintergrundkarte, Hinweise) --- */
+.flat-btn{
+  display:block;width:100%;padding:9px 11px;margin-bottom:5px;
+  background:var(--weiss);border:1px solid var(--linie);border-radius:var(--radius);
+  color:var(--dunkel);font-family:inherit;font-size:11.5px;cursor:pointer;
+  text-align:left;transition:background .12s,border-color .12s,color .12s;
+}
+.flat-btn:hover:not(:disabled){background:var(--flaeche)}
+.flat-btn:disabled{color:var(--hell);border-style:dashed;cursor:not-allowed}
+.flat-btn.active{border-color:var(--akzent);background:var(--akzent-tint);color:var(--akzent);font-weight:700}
+.flat-btn:last-child{margin-bottom:0}
+
+/* ======================================================================
+   3. OBJEKTDETAILS (Fenster oben rechts über der Karte)
+   ---------------------------------------------------------------------- */
+#infobox-wrap{
+  position:absolute;top:16px;right:16px;width:300px;max-width:calc(100vw - 32px);
+  max-height:calc(100vh - 32px);overflow-y:auto;z-index:1200;display:none;
+}
+#infobox-wrap.offen{display:block}
+.infobox{
+  display:none;position:relative;background:var(--weiss);
+  border:1px solid var(--linie);border-top:3px solid var(--akzent);
+  border-radius:var(--radius);padding:14px 15px 12px;font-size:12px;
+  box-shadow:0 6px 24px rgba(0,0,0,.14);
+}
+.infobox.active{display:block}
+.infobox-pot{border-top-color:var(--potenzial)}
+.ib-close{
+  position:absolute;top:8px;right:9px;background:none;border:none;color:var(--hell);
+  font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:4px;
+}
+.ib-close:hover{color:var(--text);background:var(--flaeche)}
+.infobox h3{font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text);padding-right:20px}
+
+.info-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;border-bottom:1px solid var(--linie);gap:10px;
+}
+.info-row:last-of-type{border-bottom:none}
+.info-key{color:var(--grau);flex-shrink:0}
+.info-val{color:var(--text);font-weight:700;text-align:right}
+/* Die hervorgehobene erste Zeile — in beiden Fenstern die Fläche. */
+.info-row.leitwert{padding:7px 0}
+.info-row.leitwert .info-val{font-size:15px}
+
+/* --- Etiketten --- */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap}
+.b-akzent{background:var(--akzent-tint);color:var(--akzent)}
+.b-pot{background:var(--potenzial-tint);color:var(--potenzial-kontur)}
+.b-neutral{background:var(--flaeche);color:var(--grau)}
+.b-warn{background:var(--gegen-tint);color:var(--gegen)}
+
+.btn-calc{
+  width:100%;margin-top:12px;padding:10px;
+  background:var(--potenzial);border:none;border-radius:var(--radius);
+  color:var(--weiss);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;
+}
+.btn-calc:hover{background:var(--potenzial-kontur)}
+
+/* ======================================================================
+   4. ÜBERLAGERUNGEN (Hinweise, Rechner)
+   ---------------------------------------------------------------------- */
+.overlay{
+  display:none;position:fixed;inset:0;background:rgba(17,17,17,.42);z-index:9000;
+  align-items:center;justify-content:center;padding:20px;
+}
+.overlay.open{display:flex}
+.dialog{
+  background:var(--weiss);border-radius:10px;padding:26px;
+  max-height:88vh;overflow-y:auto;position:relative;
+  box-shadow:0 18px 50px rgba(0,0,0,.28);
+}
+#hinweis-modal{width:660px;max-width:100%}
+#rechner-modal{width:480px;max-width:100%}
+.dialog h2{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;padding-right:28px}
+.dialog-sub{font-size:11.5px;color:var(--grau);margin-bottom:18px}
+.btn-close{
+  position:absolute;top:14px;right:16px;background:none;border:none;
+  color:var(--hell);font-size:20px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:4px;
+}
+.btn-close:hover{color:var(--text);background:var(--flaeche)}
+
+/* --- Fließtext der Hinweise --- */
+.hinweis{font-size:12px;color:var(--dunkel);line-height:1.68}
+.hinweis p{margin-bottom:13px}
+.hinweis p:last-child{margin-bottom:0}
+.hinweis strong{color:var(--text)}
+.hinweis em{font-style:normal;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--text)}
+
+/* ======================================================================
+   5. KOSTENRECHNER
+   ---------------------------------------------------------------------- */
+.feld{margin-bottom:14px}
+.feld > label{display:block;font-size:11px;font-weight:700;color:var(--text);margin-bottom:5px}
+.feld-hint{font-size:10px;color:var(--grau);margin-top:4px;line-height:1.45}
+.feld select,.feld input[type=number]{
+  width:100%;padding:9px 10px;background:var(--weiss);
+  border:1px solid var(--linie);border-radius:var(--radius);
+  color:var(--text);font-family:inherit;font-size:12px;
+}
+.feld select:focus,.feld input:focus{outline:none;border-color:var(--akzent)}
+
+/* Auswahl als Kacheln statt Auswahlliste — der Aufbau ist die
+   wichtigste Entscheidung und soll vergleichbar nebeneinander stehen. */
+.kachel-reihe{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.kachel{
+  padding:9px 7px;background:var(--weiss);border:1px solid var(--linie);
+  border-radius:var(--radius);cursor:pointer;text-align:center;
+  font-family:inherit;transition:border-color .12s,background .12s;
+}
+.kachel:hover{background:var(--flaeche)}
+.kachel.active{border-color:var(--akzent);background:var(--akzent-tint)}
+.kachel b{display:block;font-size:11px;color:var(--text);margin-bottom:2px}
+.kachel span{display:block;font-size:9.5px;color:var(--grau);line-height:1.3}
+.kachel.active b{color:var(--akzent)}
+
+/* Schalterzeile für Ja/Nein */
+.schalter-reihe{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-top:1px solid var(--linie)}
+.schalter-reihe label{font-size:11.5px;color:var(--text);cursor:pointer}
+.schalter-reihe .feld-hint{margin-top:2px}
+.schalter{position:relative;width:34px;height:19px;cursor:pointer;flex-shrink:0}
+.schalter input{opacity:0;width:0;height:0}
+.schalter-bahn{position:absolute;inset:0;background:var(--hell);border-radius:19px;transition:.15s}
+.schalter-bahn:before{content:"";position:absolute;height:15px;width:15px;left:2px;bottom:2px;
+  background:var(--weiss);border-radius:50%;transition:.15s}
+.schalter input:checked+.schalter-bahn{background:var(--akzent)}
+.schalter input:checked+.schalter-bahn:before{transform:translateX(15px)}
+
+/* --- Ergebnis --- */
+#ergebnis{margin-top:4px}
+.erg-block{border-top:1px solid var(--linie);padding-top:14px;margin-top:14px}
+.erg-haupt{background:var(--akzent-tint);border-radius:var(--radius);padding:14px 15px;margin-bottom:12px}
+.erg-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--grau);margin-bottom:5px}
+.erg-val{font-size:23px;font-weight:700;color:var(--akzent);letter-spacing:-.6px}
+.erg-val small{font-size:12px;font-weight:400;color:var(--grau);letter-spacing:0}
+.erg-zeile{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11.5px;padding:5px 0;gap:12px}
+.erg-zeile .k{color:var(--grau)}
+.erg-zeile .v{color:var(--text);font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.erg-zeile.abzug .v{color:var(--akzent)}
+.erg-gruppe-titel{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;color:var(--grau);margin-bottom:6px}
+.erg-fazit{background:var(--flaeche);border-radius:var(--radius);
+  padding:11px 12px;margin-top:12px;font-size:11px;color:var(--dunkel);line-height:1.6}
+.erg-fazit strong{color:var(--text)}
+.warnung{
+  display:flex;gap:8px;background:var(--gegen-tint);border-radius:var(--radius);
+  padding:10px 12px;margin-top:12px;font-size:10.5px;color:var(--dunkel);line-height:1.55;
+}
+.warnung b{color:var(--gegen)}
+
+/* ======================================================================
+   6. GRÜNDACHMELDER
+   ======================================================================
+   Der Melder benutzt die Bausteine des Rechners (.feld, .feld-hint) und
+   führt keine eigenen Farben ein. Neu sind nur die Schrittkästen und die
+   Hinweisleiste, die über der Karte steht, solange eine Fläche bestimmt
+   wird.
+   ---------------------------------------------------------------------- */
+#melder-modal{width:520px;max-width:100%}
+
+.melder-schritt{border:1px solid var(--linie);border-radius:var(--radius);
+  padding:13px 14px;margin-bottom:12px}
+.melder-schritt.erledigt{border-color:var(--akzent);background:var(--akzent-tint)}
+.melder-kopf{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.melder-nr{width:18px;height:18px;border-radius:50%;background:var(--hell);
+  color:var(--weiss);font-size:10px;font-weight:700;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center}
+.melder-schritt.erledigt .melder-nr{background:var(--akzent)}
+.melder-kopf b{font-size:11.5px;font-weight:700;color:var(--text)}
+.melder-ort{font-size:11px;color:var(--dunkel);line-height:1.6}
+.melder-ort b{color:var(--text)}
+
+.paar{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.feld input[type=text],.feld textarea{
+  width:100%;padding:9px 10px;background:var(--weiss);
+  border:1px solid var(--linie);border-radius:var(--radius);
+  color:var(--text);font-family:inherit;font-size:12px;resize:vertical;
+}
+.feld input[type=text]:focus,.feld textarea:focus{outline:none;border-color:var(--akzent)}
+.feld input:disabled{background:var(--flaeche);color:var(--grau)}
+
+.btn-primaer{
+  width:100%;padding:11px;background:var(--akzent);border:none;
+  border-radius:var(--radius);color:var(--weiss);font-family:inherit;
+  font-size:12.5px;font-weight:700;cursor:pointer;
+}
+.btn-primaer:hover:not(:disabled){background:var(--kontur-gruendach)}
+.btn-primaer:disabled{background:var(--hell);cursor:not-allowed}
+
+/* Hinweisleiste über der Karte, solange eine Fläche bestimmt wird.
+   Sie liegt mittig über dem Kartenausschnitt, nicht über dem Fenster. */
+/* Zentriert über left:0/right:0 plus margin:auto statt über left:50%:
+   Bei left:50% stünde der Leiste nur die halbe Kartenbreite zur
+   Verfügung, und der Text bräche viel zu früh um. */
+#melder-bar{
+  display:none;position:absolute;top:16px;z-index:1300;
+  left:0;right:0;margin:0 auto;width:fit-content;max-width:calc(100% - 32px);
+  background:var(--text);color:var(--weiss);border-radius:var(--radius);
+  padding:10px 12px;font-size:11.5px;line-height:1.45;
+  box-shadow:0 6px 24px rgba(0,0,0,.3);align-items:center;gap:14px;
+}
+#melder-bar.offen{display:flex}
+/* Kein flex:1 — die Leiste ist absolut positioniert und damit
+   schrumpfend; ein Basiswert 0 würde den Text auf Minimalbreite
+   quetschen, statt die Leiste mitwachsen zu lassen. */
+#melder-bar .mb-text{flex:0 1 auto}
+#melder-bar .mb-zahl{font-weight:700;white-space:nowrap}
+#melder-bar button{
+  background:var(--weiss);border:none;border-radius:4px;padding:6px 10px;
+  font-family:inherit;font-size:11px;font-weight:700;color:var(--text);
+  cursor:pointer;white-space:nowrap;
+}
+#melder-bar button:disabled{opacity:.4;cursor:not-allowed}
+#melder-bar button.geist{background:rgba(255,255,255,.14);color:var(--weiss)}
+#map.melden{cursor:crosshair}
+
+/* ======================================================================
+   7. KARTE
+   ---------------------------------------------------------------------- */
+#map{flex:1;height:100vh}
+#ladebalken{position:absolute;top:0;left:0;height:2px;background:var(--akzent);
+  width:0;transition:width .3s;z-index:2000}
+.leaflet-container{font-family:Arial,Helvetica,sans-serif}
+
+@media(max-width:900px){
+  #infobox-wrap{top:auto;bottom:16px;right:16px;left:16px;width:auto;max-height:52vh}
+  #melder-bar{left:12px;right:12px;width:auto;max-width:none;flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================================================================
+     SEITENLEISTE
+     ====================================================================== -->
+<div id="sidebar">
+
+  <div id="sidebar-header">
+    <h1>Wilhelmsburger Gründach-Atlas</h1>
+  </div>
+
+  <!-- Ebene: Bestand und Potenzial schließen einander aus. Beide zeigen
+       Dachflächen, aber auf unterschiedlichen Bezugsgeometrien (ganze
+       Gebäude gegen einzelne Teilflächen) — übereinander gezeichnet
+       ergäbe das ein Bild, das keine der beiden Zahlen mehr stützt.
+
+       Seit v6.2 sind die Knöpfe Schalter: Ein zweiter Klick auf die
+       aktive Ebene nimmt sie aus der Karte. Damit lassen sich beide
+       Ebenen abschalten — so wie in v5 — ohne dafür einen dritten Knopf
+       zu brauchen, und ohne dass das Luftbild neu lädt. -->
+  <div class="section">
+    <div class="section-title">Ebene</div>
+    <div class="switch ebene">
+      <button class="active" data-ebene="gd" id="eb-gd" onclick="setEbene('gd')">Bestand</button>
+      <button data-ebene="pot" id="eb-pot" onclick="setEbene('pot')">Potenzial</button>
+    </div>
+    <div class="section-note" id="ebene-note"></div>
+  </div>
+
+  <!-- Jahrgang: gilt nur für den Bestand. -->
+  <div class="section" id="sec-jahr">
+    <div class="section-title">Jahrgang</div>
+    <div class="switch">
+      <button class="active" id="jb-2022" onclick="setJahr('2022')">2022<small>unbelaubt</small></button>
+      <button id="jb-2024" onclick="setJahr('2024')">2024<small>belaubt</small></button>
+    </div>
+  </div>
+
+  <div class="section" id="sec-statistik">
+    <div class="section-title">Statistik <span id="st-kontext" style="color:var(--text)"></span></div>
+    <div class="stats-grid" id="stats-gd">
+      <div class="stat-card"><div class="stat-val" id="s-gd">–</div><div class="stat-lbl">Gründächer</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-ha">–</div><div class="stat-lbl">Gesamtdachfläche</div></div>
+      <div class="stat-card breit"><div class="stat-val" id="s-geb">–</div><div class="stat-lbl">Gebäude</div></div>
+    </div>
+    <div class="stats-grid" id="stats-pot" style="display:none">
+      <div class="stat-card"><div class="stat-val" id="p-teil">–</div><div class="stat-lbl">Dachteilflächen</div></div>
+      <div class="stat-card"><div class="stat-val" id="p-ha">–</div><div class="stat-lbl">Nettofläche gesamt</div></div>
+      <div class="stat-card"><div class="stat-val" id="p-frei">–</div><div class="stat-lbl">davon unbegrünt</div></div>
+      <div class="stat-card"><div class="stat-val" id="p-geb">–</div><div class="stat-lbl">Gebäude</div></div>
+    </div>
+  </div>
+
+  <!-- Legende: wechselt mit der Ebene. -->
+  <div class="section" id="sec-legende-gd">
+    <div class="section-title">Begrünungsgrad</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-5)"></div>Hoch — ab 75 %<span class="legend-count" id="lg-hoch"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-4)"></div>Mittel — 50 bis 75 %<span class="legend-count" id="lg-mittel"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3)"></div>Gering — 20 bis 50 %<span class="legend-count" id="lg-gering"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3);border:1px dashed var(--kontur-gruendach)"></div>visuell bestätigt, ohne Messung<span class="legend-count" id="lg-geprueft"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--hell)"></div>nicht bewertbar<span class="legend-count" id="lg-teil"></span></div>
+    <div class="section-note">Der Begrünungsgrad stammt aus dem Modell. Bei visuell
+      ergänzten Dächern liegt keine Messung vor — sie sind als Gründach belegt, aber
+      ohne Flächenanteil. Erfahrungsgemäß liegen sie überwiegend zwischen 25 und 50 %.</div>
+  </div>
+
+  <div class="section" id="sec-legende-pot" style="display:none">
+    <div class="section-title">Dachteilflächen</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--potenzial)"></div>unbegrünt — Flachdach<span class="legend-count" id="lp-flach"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--potenzial-tint);border-color:var(--potenzial-kontur)"></div>unbegrünt — geneigt<span class="legend-count" id="lp-geneigt"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-5)"></div>bereits begrünt<span class="legend-count" id="lp-begruent"></span></div>
+    <div class="section-note">Potenzial auf einzelnen Dachteilflächen, weil Neigung und
+      Ausrichtung erst auf dieser Ebene vorliegen. Aufbauten sind bereits abgezogen.
+      Diese Ebene ist reiner Modellstand und visuell nicht nachkartiert.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Hintergrundkarte</div>
+    <button class="flat-btn active" id="btn-dop" onclick="setBase('dop')">Luftbild <span id="dop-jahr">2022</span> · LGV Hamburg</button>
+    <button class="flat-btn" id="btn-osm" onclick="setBase('osm')">OpenStreetMap</button>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Mitmachen</div>
+    <!-- Der Melder ist fertig, aber abgeschaltet: MELDER_AKTIV im
+         JavaScript steht auf false. Der Knopf bleibt als Platzhalter
+         stehen, damit die Stelle im Aufbau schon besetzt ist.
+         disabled wird beim Laden gesetzt, nicht hier — so gibt es für
+         den Zustand nur eine Quelle. -->
+    <button class="flat-btn" id="btn-melder" onclick="oeffneMelder()">Gründach melden</button>
+    <div class="section-note" id="melder-note"></div>
+  </div>
+
+  <div class="section">
+    <button class="flat-btn" onclick="openHinweise()">Datengrundlage und Lesehinweise</button>
+  </div>
+</div>
+
+<div id="map">
+  <div id="ladebalken"></div>
+
+  <!-- Hinweisleiste des Melders. Sie steht im Kartencontainer, damit
+       „mittig" die Mitte der Karte meint und nicht die des Fensters —
+       sonst schiebt sie sich bei schmalen Fenstern über die
+       Seitenleiste. Leaflet setzt den Container auf position:relative. -->
+  <div id="melder-bar">
+    <span class="mb-text" id="mb-text"></span>
+    <span class="mb-zahl" id="mb-zahl"></span>
+    <button id="mb-zurueck" onclick="melderPunktZurueck()">Punkt zurück</button>
+    <button id="mb-fertig" onclick="melderZeichnenFertig()">Fertig</button>
+    <button class="geist" onclick="melderAbbrechen()">Abbrechen</button>
+  </div>
+</div>
+
+<!-- ======================================================================
+     OBJEKTDETAILS
+     ====================================================================== -->
+<div id="infobox-wrap">
+
+  <div class="infobox infobox-gd" id="ib-gd">
+    <button class="ib-close" onclick="closeBox()" title="Schließen">&times;</button>
+    <h3>Gründach — ganzes Gebäude</h3>
+    <div class="info-row leitwert"><span class="info-key">Dachfläche</span><span class="info-val" id="g-dach">–</span></div>
+    <div class="info-row"><span class="info-key">Begrünungsgrad</span><span class="info-val" id="g-cov">–</span></div>
+    <div class="info-row"><span class="info-key">Erkannte begrünte Fläche</span><span class="info-val" id="g-veg">–</span></div>
+    <div class="info-row"><span class="info-key">Klasse</span><span class="info-val" id="g-klasse">–</span></div>
+  </div>
+
+  <div class="infobox infobox-pot" id="ib-pot">
+    <button class="ib-close" onclick="closeBox()" title="Schließen">&times;</button>
+    <h3>Dachteilfläche</h3>
+    <div class="info-row leitwert"><span class="info-key">Nettofläche</span><span class="info-val" id="p-area">–</span></div>
+    <div class="info-row"><span class="info-key">Fläche in der Schräge</span><span class="info-val" id="p-schraeg">–</span></div>
+    <div class="info-row"><span class="info-key">Neigung</span><span class="info-val" id="p-slope">–</span></div>
+    <div class="info-row"><span class="info-key">Ausrichtung</span><span class="info-val" id="p-aspect">–</span></div>
+    <div class="info-row"><span class="info-key">Zustand</span><span class="info-val" id="p-status">–</span></div>
+    <button class="btn-calc" onclick="openRechner()">Kosten und Wirkung berechnen</button>
+  </div>
+</div>
+
+<!-- ======================================================================
+     DATENGRUNDLAGE UND LESEHINWEISE
+     ======================================================================
+     >>> Dieser Text ist frei editierbar. Er steht vollständig hier im
+         HTML — es gibt keine zweite Quelle dafür. Absätze sind <p>,
+         Hervorhebungen <strong>, Datenfeldnamen <em>.
+     ====================================================================== -->
+<div class="overlay" id="hinweis-overlay">
+  <div class="dialog" id="hinweis-modal">
+    <button class="btn-close" onclick="closeHinweise()">&times;</button>
+    <h2>Datengrundlage und Lesehinweise</h2>
+    <p class="dialog-sub">Wilhelmsburger Gründach-Atlas · Elbinsel Wilhelmsburg</p>
+    <div class="hinweis">
+
+      <p><strong>Datengrundlage.</strong> Dachgeometrie durchgehend aus Dachflächen
+      Hamburg; für Gebäude ohne Entsprechung — Neubauten nach dessen Stichtag — tritt
+      der ALKIS-Umriss an ihre Stelle. Welche Gebäude im jeweiligen Jahr existieren,
+      legt der ALKIS-Stand fest (April 2022, Juli 2024, für das Potenzial 2026).
+      Gartenlauben sind ausgeschlossen, da sie den Aufbau einer Begrünung statisch
+      nicht tragen. Dachvegetation: eigenes Segmentierungsmodell (U-Net,
+      EfficientNet-B3) auf Orthophotos, 20 cm. Als Dachfläche zählen die Kategorien
+      <em>Roof</em> und <em>detail-terrace_Roof</em>, dazu <em>detail_Roof</em>, soweit
+      die Teilfläche Mindestgröße und Formfilter erfüllt; Schornsteine, Gauben,
+      Attiken und Lichtkuppeln sind ausgenommen.</p>
+
+      <p><strong>Wie der Bestand zustande kommt.</strong> Das Modell schlägt Gründächer
+      vor, jeder Vorschlag wurde am Luftbild einzeln geprüft. Der Atlas zeigt nur, was
+      diese Prüfung bestätigt hat — 28,7 % der maschinellen Vorschläge mussten
+      korrigiert werden. Der Jahrgang 2024 ist keine eigene Erhebung, sondern aus dem
+      geprüften Stand 2022 fortgeschrieben: Ein Dach fällt nur mit belegtem Rückbau aus
+      dem Bestand und kommt nur mit Beleg hinzu. Dächer, die 2024 unter Bäumen oder im
+      Schatten liegen, bleiben daher enthalten. Kartierregeln nach LUP/SenUVK Berlin
+      2020.</p>
+
+      <p><strong>Vollständigkeit.</strong> Eine Zufallsstichprobe von 300 nicht
+      erkannten Gebäuden ergab zwei übersehene Gründächer. Hochgerechnet fehlen dem
+      Atlas rund 60 Objekte, überwiegend kleine Dächer unter 50 m²; er erfasst damit
+      etwa vier Fünftel des Bestands.</p>
+
+      <p><strong>Zur Veränderung.</strong> Zwischen 2022 und 2024 sind zehn Zugänge
+      belegt — neun Entwicklungen im Bestand und ein Neubau mit Gründach.
+      Modelldifferenzen zwischen Bildjahrgängen sind grundsätzlich nicht als reale
+      Entwicklung zu lesen.</p>
+
+      <p><strong>Zum Potenzial.</strong> Die Potenzialebene liegt auf einzelnen
+      Dachteilflächen, weil Neigung und Ausrichtung erst dort vorliegen. Sie ist
+      reiner Modellstand und wurde — anders als der Bestand — nicht visuell
+      nachkartiert; als Hintergrund dient deshalb das Luftbild 2026, das dem
+      ALKIS-Stand dieser Ebene entspricht. Aufbauten sind rechnerisch abgezogen.
+      Zusätzlich entfallen Teilflächen, die nirgends <strong>2 m breit</strong>
+      sind: Traufkanten, Grate und schmale Reste zwischen zwei Neigungswechseln
+      erreichen zwar die Mindestgröße von 20 m², tragen aber keinen Aufbau, der
+      Randanschluss, Wartungsweg und Vegetationsfläche unterbringt. Das betrifft
+      765 der ursprünglich 15.685 Teilflächen (4,9 %, zusammen 3,6 ha). Statik,
+      Dachzustand und Nutzungskonflikte kann das Verfahren nicht beurteilen; eine
+      als geeignet ausgewiesene Fläche ist ein Hinweis, keine Zusage.</p>
+
+      <p><strong>Zu den Zahlen.</strong> Als Gründach gilt eine Fläche ab 20 m² Größe.
+      Der Begrünungsgrad stammt aus dem Modell und liegt nur für maschinell erkannte
+      Dächer vor. Die Bestandszahlen beziehen sich auf ganze Gebäude, die
+      Potenzialflächen auf einzelne Dachteile — beide Zahlen sind nicht unmittelbar
+      gegeneinander aufzurechnen. Aus diesem Grund lassen sich beide Ebenen in dieser
+      Anwendung auch nicht gleichzeitig einschalten.</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     KOSTEN- UND WIRKUNGSRECHNER
+     ====================================================================== -->
+<div class="overlay" id="rechner-overlay">
+  <div class="dialog" id="rechner-modal">
+    <button class="btn-close" onclick="closeRechner()">&times;</button>
+    <h2>Kosten und Wirkung</h2>
+    <p class="dialog-sub" id="r-flaeche-sub">Orientierungswerte für diese Dachteilfläche</p>
+
+    <div class="feld">
+      <label>Aufbau</label>
+      <div class="kachel-reihe" id="aufbau-kacheln">
+        <button class="kachel active" data-aufbau="extensiv" onclick="setAufbau('extensiv')">
+          <b>Extensiv</b><span>10 cm<br>Sedum, Moos</span></button>
+        <button class="kachel" data-aufbau="einfach_intensiv" onclick="setAufbau('einfach_intensiv')">
+          <b>Einf. intensiv</b><span>20 cm<br>Gräser, Stauden</span></button>
+        <button class="kachel" data-aufbau="intensiv" onclick="setAufbau('intensiv')">
+          <b>Intensiv</b><span>30 cm<br>Dachgarten</span></button>
+      </div>
+      <div class="feld-hint" id="aufbau-hint"></div>
+    </div>
+
+    <div class="feld">
+      <label>Fläche</label>
+      <input type="number" id="r-flaeche" min="1" max="100000" step="1" oninput="rechne()"/>
+      <div class="feld-hint">Übernommen aus der angeklickten Teilfläche. Für eine
+        Teilbegrünung kannst du den Wert überschreiben. Gerechnet wird mit der
+        ganzen Dachfläche — tatsächlich bepflanzt wird weniger, da Randstreifen,
+        Wartungswege und Aufbauten erfahrungsgemäß 10 bis 20 % beanspruchen; für
+        die Förderung zählt allein diese Nettovegetationsfläche. Bei mehreren
+        Teilflächen auf einem Dach lohnt es sich, die Summe einzutragen: Der
+        Rechner bildet den Größeneffekt ab.</div>
+    </div>
+
+    <div class="feld">
+      <label>Antragstellung</label>
+      <select id="r-antrag" onchange="rechne()">
+        <option value="0.6">Selbstnutzende Privatperson oder WEG — 60 %</option>
+        <option value="0.4">Übrige Antragstellende — 40 %</option>
+        <option value="0">Ohne Förderung rechnen</option>
+      </select>
+      <div class="feld-hint">Fördersätze der IFB Hamburg, Höchstbetrag 100.000 € je
+        Gebäude, Mindest-Nettovegetationsfläche 20 m².</div>
+    </div>
+
+    <div class="schalter-reihe">
+      <div>
+        <label for="r-pv">Photovoltaik kombinieren</label>
+        <div class="feld-hint">Aufgeständerte Anlage über der Begrünung</div>
+      </div>
+      <label class="schalter">
+        <input type="checkbox" id="r-pv" onchange="rechne()"><span class="schalter-bahn"></span>
+      </label>
+    </div>
+
+    <div class="schalter-reihe" style="border-bottom:1px solid var(--linie)">
+      <div>
+        <label for="r-detail">Einzelposten anzeigen</label>
+        <div class="feld-hint">Gewicht, Rückhalt, Pflege und Gebühr im Detail</div>
+      </div>
+      <label class="schalter">
+        <input type="checkbox" id="r-detail" checked onchange="rechne()"><span class="schalter-bahn"></span>
+      </label>
+    </div>
+
+    <div id="ergebnis"></div>
+  </div>
+</div>
+
+
+<!-- ======================================================================
+     GRÜNDACHMELDER
+     ======================================================================
+     Drei Angaben braucht der Atlas: Ort, Dachfläche, begrünte Fläche.
+     Der Dialog holt sie in dieser Reihenfolge und nimmt dafür, was schon
+     da ist — die Geometrie aus Dachflächen Hamburg, wenn das Dach im
+     Datensatz steht, sonst eine selbst gezeichnete Fläche.
+     ====================================================================== -->
+<div class="overlay" id="melder-overlay">
+  <div class="dialog" id="melder-modal">
+    <button class="btn-close" onclick="schliesseMelder()">&times;</button>
+    <h2>Gründach melden</h2>
+    <p class="dialog-sub">Für Dächer, die im Atlas fehlen oder falsch stehen</p>
+
+    <!-- Schritt 1: Ort -->
+    <div class="melder-schritt" id="ms-ort">
+      <div class="melder-kopf"><span class="melder-nr">1</span><b>Wo liegt das Dach?</b></div>
+      <div class="paar" id="melder-wahl">
+        <button class="flat-btn" style="margin:0" onclick="melderModus('dach')">Dach in der Karte anklicken</button>
+        <button class="flat-btn" style="margin:0" onclick="melderModus('zeichnen')">Fläche selbst einzeichnen</button>
+      </div>
+      <div class="feld-hint" id="melder-wahl-hint">Liegt das Gebäude in Dachflächen
+        Hamburg, genügt ein Klick — Lage und Dachfläche kommen dann aus dem Datensatz.
+        Fehlt es dort, zeichne den Umriss selbst ein.</div>
+      <div class="melder-ort" id="melder-ort-text" style="display:none"></div>
+      <button class="flat-btn" id="melder-neu" style="display:none;margin:9px 0 0"
+        onclick="melderOrtVerwerfen()">Ort noch einmal bestimmen</button>
+    </div>
+
+    <!-- Schritt 2: Flächen -->
+    <div class="melder-schritt" id="ms-flaeche">
+      <div class="melder-kopf"><span class="melder-nr">2</span><b>Wie groß ist das Dach?</b></div>
+      <div class="feld paar" style="margin-bottom:0">
+        <div>
+          <label for="m-dach">Dachfläche (m²)</label>
+          <input type="number" id="m-dach" min="1" max="200000" step="1" oninput="melderPruefe()"/>
+        </div>
+        <div>
+          <label for="m-gruen">davon begrünt (m²)</label>
+          <input type="number" id="m-gruen" min="0" max="200000" step="1" oninput="melderPruefe()"/>
+        </div>
+      </div>
+      <div class="feld-hint" id="m-anteil-hint">Geschätzte Werte genügen. Gemeint ist die
+        Fläche, auf der tatsächlich Vegetation steht — ohne Kiesstreifen, Wege und
+        Aufbauten.</div>
+    </div>
+
+    <!-- Schritt 3: Freiwilliges -->
+    <div class="melder-schritt" id="ms-rest">
+      <div class="melder-kopf"><span class="melder-nr">3</span><b>Freiwillige Angaben</b></div>
+      <div class="feld">
+        <label for="m-adresse">Adresse oder Beschreibung des Orts</label>
+        <input type="text" id="m-adresse" maxlength="160" placeholder="z. B. Veringstraße 12, Hinterhaus"/>
+      </div>
+      <div class="feld paar">
+        <div>
+          <label for="m-aufbau">Aufbau</label>
+          <select id="m-aufbau">
+            <option value="unbekannt">nicht bekannt</option>
+            <option value="extensiv">extensiv (Sedum, Moos)</option>
+            <option value="einfach_intensiv">einfach intensiv (Gräser, Stauden)</option>
+            <option value="intensiv">intensiv (Dachgarten)</option>
+          </select>
+        </div>
+        <div>
+          <label for="m-jahr">Begrünt seit (Jahr)</label>
+          <input type="number" id="m-jahr" min="1950" max="2030" step="1" placeholder="z. B. 2019"/>
+        </div>
+      </div>
+      <div class="feld">
+        <label for="m-anmerkung">Anmerkung</label>
+        <textarea id="m-anmerkung" rows="2" maxlength="600"
+          placeholder="Was der Atlas sonst noch wissen sollte"></textarea>
+      </div>
+      <div class="feld" style="margin-bottom:0">
+        <label for="m-kontakt">Kontakt für Rückfragen</label>
+        <input type="text" id="m-kontakt" maxlength="120" placeholder="freiwillig"/>
+        <div class="feld-hint">Bleibt in der Meldung, die du selbst weitergibst. Diese
+          Seite sendet nichts und speichert nichts.</div>
+      </div>
+    </div>
+
+    <div id="melder-ausgabe"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ======================================================================
+   A. ANNAHMEN DES RECHNERS
+   ======================================================================
+   Alle Zahlen, die der Rechner verwendet, stehen hier — und nur hier.
+   Jede Zeile ist mit ihrer Quelle versehen. Wer einen Wert ändert,
+   ändert ihn für die gesamte Anwendung.
+
+   Die Struktur folgt dem, was die Kataster aus Kapitel 3 ausgeben:
+   Substratstärke wählen, daraus Gewicht, Rückhalt, Gebührenersparnis
+   und eine Kostenspanne fortrechnen. Ausgegeben wird bewusst eine
+   Spanne, kein Punktwert.
+
+   >>> Seit v6.2 gelten die Kostenspannen für ein Projekt von 100 m².
+       Darunter wird es je m² teurer, darüber billiger; die Funktion
+       groessenfaktor() rechnet das um. Herleitung und Quellenabgleich
+       stehen in KOSTENBASIS.md.
+   ---------------------------------------------------------------------- */
+const ANNAHMEN = {
+
+  /* --- Aufbauarten ---------------------------------------------------
+     kosten_min/max : € je m², schlüsselfertig inkl. Einbau, brutto,
+                      BEZOGEN AUF 100 m² PROJEKTGRÖSSE. Statik, Planung,
+                      Gerüst, Genehmigung und die Dachabdichtung selbst
+                      sind NICHT enthalten.
+     degression     : Exponent der Größenfunktion (siehe unten). Je mehr
+                      Kosten in Pflanzware und Handarbeit stecken, desto
+                      weniger bringt die Fläche — deshalb fällt der
+                      Exponent mit der Aufbaustärke.
+     gewicht_min/max: kg je m² im wassergesättigten Zustand (FLL).
+     rueckhalt      : Anteil des Jahresniederschlags, der zurückgehalten
+                      und verdunstet wird.
+     ------------------------------------------------------------------- */
+  aufbauten: {
+    extensiv: {
+      /* Verankert: heygrün, Ratgeber Dachbegrünung Kosten (Stand 09/2026),
+         Profi-Umsetzung 100 m² = 66–86 €/m². Nach unten auf 65 geöffnet
+         (Großauftrag, Neubau), nach oben auf 95 (Bestandsdach, schwierige
+         Zuwegung). Zum Vergleich: Dickhaut et al. 2017 messen an neun
+         Hamburger Objekten 40–45 €/m² Vegetationsfläche — Herstellung
+         ohne Nebenkosten und auf die bepflanzte Fläche bezogen. */
+      name:'Extensivbegrünung', substrat_cm:10,
+      kosten_min:65,  kosten_max:95,
+      degression:0.30,
+      gewicht_min:90, gewicht_max:150,
+      rueckhalt:0.55,
+      hinweis:'Sedum und Moose, einmal jährlich Kontrollgang. Der Regelfall '
+             +'im Bestand und der einzige Aufbau, der ohne statische '
+             +'Ertüchtigung meist auskommt.'
+    },
+    einfach_intensiv: {
+      /* Orientierungswert, schwächer belegt als die Extensivbegrünung:
+         Die verfügbaren Marktangaben (Optigrün nennt 15–40 €/m² für den
+         Semi-Intensivaufbau) beziehen sich auf Systemmaterial, nicht auf
+         die schlüsselfertige Leistung, und sind deshalb nicht direkt
+         vergleichbar. Spanne unverändert aus v6.1. */
+      name:'Einfache Intensivbegrünung', substrat_cm:20,
+      kosten_min:110, kosten_max:190,
+      degression:0.25,
+      gewicht_min:180,gewicht_max:300,
+      rueckhalt:0.65,
+      hinweis:'Gräser und Stauden, regelmäßige Pflege und in Trockenphasen '
+             +'Bewässerung. Statische Prüfung erforderlich.'
+    },
+    intensiv: {
+      /* Ebenfalls Orientierungswert. Optigrün nennt „ab etwa 50 €/m²",
+         gemeint ist der Systemaufbau ohne Wege, Terrassen, Möblierung
+         und Bewässerung — beim begehbaren Dachgarten macht genau das
+         den Preis. Spanne unverändert aus v6.1. */
+      name:'Intensivbegrünung', substrat_cm:30,
+      kosten_min:170, kosten_max:270,
+      degression:0.20,
+      gewicht_min:300,gewicht_max:500,
+      rueckhalt:0.75,
+      hinweis:'Begehbarer Dachgarten mit Sträuchern. Erfordert eine eigens '
+             +'dafür ausgelegte Tragkonstruktion — im Bestand selten '
+             +'nachrüstbar.'
+    }
+  },
+
+  /* --- Photovoltaik über der Begrünung ---
+     Aufschlag für die aufgeständerte Unterkonstruktion, € je m². Die IFB
+     gewährt dafür einen Zuschlag; die Verschattung senkt den Rückhalt
+     nicht nennenswert, kühlt aber die Module. */
+  pv_aufschlag_min: 15,
+  pv_aufschlag_max: 25,
+
+  /* --- Größendegression -------------------------------------------------
+     Warum überhaupt: Anfahrt, Baustelleneinrichtung, Kran oder Förderband,
+     Aufmaß und Angebot fallen einmal an, unabhängig von der Fläche. Ab
+     etwa 1.000 m² wechselt zusätzlich das Verfahren — Substrat wird
+     geblasen statt in Säcken gesetzt. Kapitel 2.1.3 der Arbeit nennt
+     genau das als Grund für die Marktspanne von 66 bis 118 €/m².
+
+     Modell: faktor = (bezugsflaeche / A)^degression, gekappt, damit die
+     Funktion an den Rändern nicht ins Unplausible läuft. Die Kappung nach
+     unten greift ab rund 1.400 m², die nach oben unter rund 21 m².
+
+     Abgleich (Extensivbegrünung, brutto, schlüsselfertig):
+       18 m²    Modell 104–152   heygrün 118–138
+       36 m²    Modell  88–129   heygrün  88–108
+      100 m²    Modell  65– 95   heygrün  66– 86
+     1000 m²    Modell  33– 48   Optigrün Spardach ab 27 netto = ab 32 brutto
+     ------------------------------------------------------------------- */
+  bezugsflaeche_m2: 100,
+  degression_min: 0.45,
+  degression_max: 1.60,
+
+  /* --- Förderung IFB Hamburg -------------------------------------------
+     Quelle: Kapitel 2.1.4 der Arbeit nach IFB Hamburg.
+     60 % für selbstnutzende Privatpersonen und WEG, 40 % für alle
+     übrigen; Höchstbetrag 100.000 € je Gebäude; Mindestfläche 20 m²
+     Nettovegetationsfläche; Mindestaufbaudicke 8 cm im Bestand,
+     12 cm im Wohnungsneubau. */
+  foerder_hoechstbetrag: 100000,
+  foerder_mindestflaeche_m2: 20,
+
+  /* --- Gesplittete Niederschlagswassergebühr ---------------------------
+     gebuehr_pro_m2 : € je m² angeschlossener Fläche und Jahr.
+                      Hamburg Wasser, Stand 01.01.2026 (zuvor 0,83 €).
+     ermaessigung   : Gründächer ab 5 cm Substrataufbau gelten als
+                      teilversiegelt und werden um 50 % entlastet
+                      (eingeführt 2012).
+     ------------------------------------------------------------------- */
+  gebuehr_pro_m2: 0.86,
+  gebuehr_ermaessigung: 0.50,
+  gebuehr_mindestsubstrat_cm: 5,
+
+  /* --- Pflege, € je m² und Jahr ---
+     Quelle: Dickhaut et al. 2017, zitiert in Kapitel 2.1.3. */
+  pflege_gruendach: 0.60,
+  pflege_schwarzdach: 0.25,
+
+  /* --- Niederschlag ---
+     Mittlerer Jahresniederschlag Hamburg, DWD-Referenzperiode
+     1991–2020: 773 mm. */
+  niederschlag_mm: 773,
+
+  /* --- Betrachtungszeitraum für die kumulierte Darstellung, Jahre ---
+     40 Jahre entspricht dem Lebenszyklusvergleich aus Kapitel 2.1.3. */
+  zeitraum_jahre: 40
+};
+
+/* ======================================================================
+   B. KARTE
+   ---------------------------------------------------------------------- */
+const CENTER=[53.4930,10.0090], ZOOM=13;
+
+/* Liest eine Farbe aus den CSS-Variablen oben. Dadurch gibt es für
+   Oberfläche und Karte nur eine Farbquelle. */
+const kartenfarbe = name =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const osmLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:20,attribution:'© OpenStreetMap-Mitwirkende'});
+
+/* Die Zeitreihe "unbelaubt" reicht bis 2026, die Zeitreihe "belaubt" nur
+   bis 2024 (GetCapabilities, Stand 09/2026). Für 2026 gibt es daher nur
+   das unbelaubte Bild — was der Potenzialebene entgegenkommt: ohne Laub
+   sind die Dachflächen vollständig sichtbar. */
+const luftbild={
+  '2022':L.tileLayer.wms('https://geodienste.hamburg.de/wms_dop_zeitreihe_unbelaubt',
+    {layers:'dop_zeitreihe_unbelaubt',format:'image/png',transparent:false,
+     version:'1.3.0',time:'2022',maxZoom:20,
+     attribution:'DOP 2022 unbelaubt © LGV Hamburg'}),
+  '2024':L.tileLayer.wms('https://geodienste.hamburg.de/wms_dop_zeitreihe_belaubt',
+    {layers:'dop_zeitreihe_belaubt',format:'image/png',transparent:false,
+     version:'1.3.0',time:'2024',maxZoom:20,
+     attribution:'DOP 2024 belaubt © LGV Hamburg'}),
+  '2026':L.tileLayer.wms('https://geodienste.hamburg.de/wms_dop_zeitreihe_unbelaubt',
+    {layers:'dop_zeitreihe_unbelaubt',format:'image/png',transparent:false,
+     version:'1.3.0',time:'2026',maxZoom:20,
+     attribution:'DOP 2026 unbelaubt © LGV Hamburg'})
+};
+
+const LUFTBILD_BESCHRIFTUNG={
+  '2022':'2022 unbelaubt','2024':'2024 belaubt','2026':'2026 unbelaubt'
+};
+
+/* Das Luftbild ist die Voreinstellung: Der Atlas trifft eine Aussage
+   über das, was auf dem Dach zu sehen ist — die Straßenkarte kann sie
+   weder stützen noch widerlegen. */
+let basis='dop';
+/* Startwert null, damit der erste wechsleEbene('gd') beim Laden nicht als
+   zweiter Klick gelesen wird und die Ebene gleich wieder ausschaltet. */
+let ebene=null;
+let jahr='2022';
+/* Welches Luftbild gezeigt wird, folgt der Ebene: Der Bestand gilt für
+   einen Bildjahrgang, das Potenzial steht auf dem ALKIS-Stand 2026. Bei
+   ausgeschalteten Ebenen bleibt stehen, was zuletzt galt. */
+let luftbildJahr='2022';
+
+/* preferCanvas: der Potenziallayer führt rund 15.000 Teilflächen. */
+const map=L.map('map',{center:CENTER,zoom:ZOOM,layers:[luftbild[luftbildJahr]],
+  zoomControl:true,preferCanvas:true});
+L.control.scale({imperial:false}).addTo(map);
+
+const daten={};
+const layers={gd:null,pot:null};
+let stat=null, aktuelleFlaeche=0, aktuellerAufbau='extensiv';
+
+/* ======================================================================
+   C. DARSTELLUNG DER FLÄCHEN
+   ---------------------------------------------------------------------- */
+
+/* Ab v5.3 ist jeder Eintrag visuell geprüft. Der Begrünungsgrad stammt
+   aber weiterhin aus dem Modell und liegt nur dort vor, wo das Modell das
+   Dach selbst erkannt hat. Handkartierte Ergänzungen erhalten deshalb
+   eine eigene Klasse statt eines erfundenen Prozentwerts. */
+const klasseVon=p=>{
+  if(p.klasse==='unklar') return 'unklar';
+  if(p.anteil==null) return 'geprueft';
+  const a=+p.anteil; return a>=75?'hoch':a>=50?'mittel':'gering';
+};
+
+const styleGd=f=>{
+  const k=klasseVon(f.properties);
+  const fuell={
+    hoch:     kartenfarbe('--rampe-5'),
+    mittel:   kartenfarbe('--rampe-4'),
+    gering:   kartenfarbe('--rampe-3'),
+    geprueft: kartenfarbe('--rampe-3'),
+    unklar:   kartenfarbe('--hell')
+  }[k];
+  return {
+    color: k==='unklar' ? kartenfarbe('--kontur-unklar') : kartenfarbe('--kontur-gruendach'),
+    weight: 1.1,
+    fillColor: fuell,
+    fillOpacity: k==='unklar' ? .45 : .8,
+    /* Die fehlende Messung bleibt am gestrichelten Umriss erkennbar. */
+    dashArray: (k==='unklar'||k==='geprueft') ? '3,3' : null
+  };
+};
+
+const stylePot=f=>{
+  const p=f.properties;
+  /* Bereits begrünte Teilflächen behalten die Bestandsfarbe — in der
+     Karte steht Grün für die Sache, nicht für eine Bewertung
+     (Layout/FARBEN.md, "Zur Doppelbelegung von Grün"). */
+  if(p.status==='begruent'){
+    return {color:kartenfarbe('--kontur-gruendach'),weight:.8,
+            fillColor:kartenfarbe('--rampe-5'),fillOpacity:.7};
+  }
+  /* Flachdächer sind das eigentliche Potenzial und werden kräftiger
+     gezeichnet als geneigte Flächen. */
+  const flach = p.typ==='flach';
+  return {
+    color: kartenfarbe('--potenzial-kontur'),
+    weight: .8,
+    fillColor: flach ? kartenfarbe('--potenzial') : kartenfarbe('--potenzial-tint'),
+    fillOpacity: flach ? .68 : .45
+  };
+};
+
+/* ======================================================================
+   D. STEUERUNG
+   ---------------------------------------------------------------------- */
+const EBENEN_NOTE = {
+  gd: 'Belegter Gründachbestand, jeder Eintrag am Luftbild geprüft. '
+    + 'Noch ein Klick auf „Bestand" blendet die Ebene aus.',
+  pot:'Begrünbare Dachteilflächen aus dem Modell, ohne visuelle Prüfung. '
+    + 'Ein Klick auf eine Fläche öffnet den Rechner, noch ein Klick auf '
+    + '„Potenzial" blendet die Ebene aus.',
+  aus:'Beide Ebenen ausgeblendet — das Luftbild ist unverdeckt zu sehen. '
+    + 'Ein Klick auf „Bestand" oder „Potenzial" holt sie zurück.'
+};
+
+/* Der Knopf in der Seitenleiste ist ein Schalter: Wer die aktive Ebene
+   noch einmal anklickt, nimmt sie aus der Karte. Das Luftbild bleibt
+   dabei stehen — die Ausblendung ändert luftbildJahr nicht, und
+   zeichneBasis() tauscht nur, was wirklich falsch ist. */
+function setEbene(e){ wechsleEbene(e===ebene ? 'aus' : e); }
+
+function wechsleEbene(e){
+  ebene=e;
+  ['gd','pot'].forEach(k=>
+    document.getElementById('eb-'+k).classList.toggle('active',k===e));
+  /* Exklusiv, und "aus" nimmt beide aus der Karte. */
+  ['gd','pot'].forEach(k=>{
+    if(!layers[k]) return;
+    if(k===e) layers[k].addTo(map); else map.removeLayer(layers[k]);
+  });
+  document.getElementById('ebene-note').textContent=EBENEN_NOTE[e];
+
+  /* Das Luftbild folgt der Ebene: Bestand zeigt seinen Bildjahrgang,
+     das Potenzial den ALKIS-Stand 2026. Bei "aus" bleibt der zuletzt
+     gezeigte Jahrgang stehen. */
+  if(e==='gd')       luftbildJahr=jahr;
+  else if(e==='pot') luftbildJahr='2026';
+
+  /* Der Jahrgang gilt nur für den Bestand; das Potenzial hat nur einen
+     Stand, und ohne Ebene gibt es nichts zu filtern. */
+  const istBestand = e==='gd';
+  document.getElementById('sec-jahr').style.display      = istBestand ? '' : 'none';
+  document.getElementById('sec-statistik').style.display = e==='aus' ? 'none' : '';
+  document.getElementById('stats-gd').style.display      = istBestand ? '' : 'none';
+  document.getElementById('stats-pot').style.display     = e==='pot' ? '' : 'none';
+  document.getElementById('sec-legende-gd').style.display  = istBestand ? '' : 'none';
+  document.getElementById('sec-legende-pot').style.display = e==='pot' ? '' : 'none';
+
+  closeBox();
+  zeichneBasis();
+  zeigeStatistik();
+  if(layers[e]) layers[e].bringToFront();
+}
+
+function setJahr(j){
+  jahr=j; luftbildJahr=j;
+  ['2022','2024'].forEach(x=>
+    document.getElementById('jb-'+x).classList.toggle('active',x===j));
+  if(daten['gd_'+j]) baueLayer('gd',daten['gd_'+j],styleGd,klickGd);
+  zeichneBasis();
+  zeigeStatistik();
+}
+
+function zeichneBasis(){
+  const soll = (basis==='osm') ? osmLayer : luftbild[luftbildJahr];
+  /* Erst das richtige Bild hinzufügen, dann nur die falschen entfernen.
+     Ein bedingungsloses removeLayer/addTo ließ in v6.1 bei jedem
+     Ebenenwechsel sämtliche WMS-Kacheln neu laden, auch wenn sich am
+     Jahrgang gar nichts geändert hatte. */
+  if(!map.hasLayer(soll)) soll.addTo(map);
+  [osmLayer].concat(Object.values(luftbild)).forEach(l=>{
+    if(l!==soll && map.hasLayer(l)) map.removeLayer(l);
+  });
+  if(ebene!=='aus' && layers[ebene]) layers[ebene].bringToFront();
+  document.getElementById('dop-jahr').textContent=LUFTBILD_BESCHRIFTUNG[luftbildJahr];
+}
+
+function setBase(w){
+  basis=w;
+  document.getElementById('btn-osm').classList.toggle('active',w==='osm');
+  document.getElementById('btn-dop').classList.toggle('active',w==='dop');
+  zeichneBasis();
+}
+
+function baueLayer(key,geojson,styleFn,klickFn){
+  if(layers[key]) map.removeLayer(layers[key]);
+  layers[key]=L.geoJSON(geojson,{
+    style:styleFn,
+    onEachFeature:(feat,lyr)=>{
+      lyr.on('click',e=>{
+        L.DomEvent.stopPropagation(e);
+        /* Beim Einzeichnen zählt allein der Klickpunkt; die Flächen unter
+           dem Zeiger dürfen ihn nicht abfangen. */
+        if(melder.modus==='zeichnen'){ melderPunktSetzen(e.latlng); return; }
+        klickFn(feat,lyr);
+      });
+    }
+  });
+  if(ebene===key) layers[key].addTo(map);
+}
+
+/* ======================================================================
+   E. OBJEKTDETAILS
+   ---------------------------------------------------------------------- */
+function closeBox(){
+  document.getElementById('infobox-wrap').classList.remove('offen');
+  ['ib-gd','ib-pot'].forEach(i=>document.getElementById(i).classList.remove('active'));
+}
+function showBox(t){
+  document.getElementById('infobox-wrap').classList.add('offen');
+  ['ib-gd','ib-pot'].forEach(i=>document.getElementById(i).classList.remove('active'));
+  document.getElementById('ib-'+t).classList.add('active');
+}
+
+const f1=v=>(v==null||isNaN(v))?'–':parseFloat(v).toFixed(1).replace('.',',');
+const m2=v=>(v==null||isNaN(v))?'–':Math.round(v).toLocaleString('de-DE')+' m²';
+const eur=v=>Math.round(v).toLocaleString('de-DE')+' €';
+const badge=(txt,cls)=>'<span class="badge '+cls+'">'+txt+'</span>';
+
+function richtung(deg){
+  if(deg==null||isNaN(deg))return '–';
+  const d=((+deg%360)+360)%360, r=['N','NO','O','SO','S','SW','W','NW'];
+  return Math.round(d)+'° ('+r[Math.round(d/45)%8]+')';
+}
+
+function klickGd(feat,lyr){
+  const p=feat.properties;
+  if(melder.modus==='dach'){ melderNimmFlaeche(feat,lyr,'gd'); return; }
+  showBox('gd');
+  /* Ohne Modellmessung wird kein Wert erfunden — das Dach ist geprüft,
+     der Begrünungsgrad ist es nicht. */
+  const ohneMessung = p.anteil==null;
+  document.getElementById('g-dach').textContent=m2(p.dach_m2);
+  document.getElementById('g-cov').innerHTML = ohneMessung
+    ? badge('nicht gemessen','b-neutral') : f1(p.anteil)+' %';
+  document.getElementById('g-veg').innerHTML = ohneMessung
+    ? badge('nicht gemessen','b-neutral') : m2(p.gruen_m2);
+  const k=klasseVon(p);
+  const c={hoch:'b-akzent',mittel:'b-akzent',gering:'b-akzent',
+           geprueft:'b-neutral',unklar:'b-neutral'}[k];
+  const l={hoch:'Hoch',mittel:'Mittel',gering:'Gering',
+           geprueft:'visuell bestätigt',unklar:'nicht bewertbar'}[k];
+  document.getElementById('g-klasse').innerHTML=badge(l,c);
+}
+
+function klickPot(feat,lyr){
+  const p=feat.properties;
+  if(melder.modus==='dach'){ melderNimmFlaeche(feat,lyr,'pot'); return; }
+  showBox('pot');
+  aktuelleFlaeche=parseFloat(p.netto_m2)||0;
+  document.getElementById('p-area').textContent=m2(aktuelleFlaeche);
+  document.getElementById('p-schraeg').textContent=m2(p.schraeg_m2);
+  document.getElementById('p-slope').innerHTML =
+    p.neigung!=null
+      ? f1(p.neigung)+'° '+badge(p.typ==='flach'?'Flachdach':'geneigt',
+          p.typ==='flach'?'b-pot':'b-neutral')
+      : badge('k. A.','b-neutral');
+  /* Ein Flachdach hat keine sinnvolle Ausrichtung; der Datensatz führt
+     dort 0°. */
+  document.getElementById('p-aspect').innerHTML =
+    p.typ==='flach' ? badge('entfällt (Flachdach)','b-neutral')
+    : (p.ausrichtung!=null ? richtung(p.ausrichtung) : badge('k. A.','b-neutral'));
+  document.getElementById('p-status').innerHTML = p.status==='begruent'
+    ? badge('bereits begrünt · '+f1(p.anteil)+' %','b-akzent')
+    : badge('unbegrünt','b-pot');
+}
+
+/* ======================================================================
+   F. STATISTIK
+   ---------------------------------------------------------------------- */
+function zeigeStatistik(){
+  if(ebene==='aus') return;
+  document.getElementById('st-kontext').textContent =
+    ebene==='gd' ? '· '+jahr : '· Modellstand';
+
+  if(ebene==='gd'){
+    const g=daten['gd_'+jahr];
+    if(!g) return;
+    const z={hoch:0,mittel:0,gering:0,geprueft:0,unklar:0};
+    let dach=0, nGd=0;
+    g.features.forEach(f=>{
+      const p=f.properties, k=klasseVon(p); z[k]++;
+      /* Nicht bewertbare Dächer zählen nicht zum belegten Bestand. */
+      if(k!=='unklar'){ nGd++; dach+=(+p.dach_m2||0); }
+    });
+    document.getElementById('s-gd').textContent=nGd;
+    /* Die Dachfläche der belegten Gründächer, nicht die gemessene
+       Vegetationsfläche: Letztere liegt nur für einen Teil der Objekte
+       vor und wäre als Gebietssumme irreführend. */
+    document.getElementById('s-ha').textContent=
+      (dach/10000).toFixed(2).replace('.',',')+' ha';
+    ['hoch','mittel','gering','geprueft'].forEach(k=>{
+      const el=document.getElementById('lg-'+k); if(el) el.textContent=z[k];
+    });
+    document.getElementById('lg-teil').textContent=z.unklar;
+    if(stat&&stat.bestand&&stat.bestand[jahr])
+      document.getElementById('s-geb').textContent=
+        (stat.bestand[jahr].gepruefte_gebaeude||0).toLocaleString('de-DE');
+  } else {
+    if(!stat||!stat.potenzial||!daten.pot) return;
+    const pz=stat.potenzial;
+    document.getElementById('p-teil').textContent=(pz.teilflaechen||0).toLocaleString('de-DE');
+    document.getElementById('p-ha').textContent=f1(pz.netto_ha)+' ha';
+    document.getElementById('p-frei').textContent=f1(pz.freie_netto_ha)+' ha';
+    document.getElementById('p-geb').textContent=(pz.gebaeude||0).toLocaleString('de-DE');
+    document.getElementById('lp-flach').textContent=(pz.flach||0).toLocaleString('de-DE');
+    document.getElementById('lp-geneigt').textContent=(pz.geneigt||0).toLocaleString('de-DE');
+    document.getElementById('lp-begruent').textContent=(pz.bereits_begruent||0).toLocaleString('de-DE');
+  }
+}
+
+/* ======================================================================
+   G. HINWEISE
+   ---------------------------------------------------------------------- */
+function openHinweise(){document.getElementById('hinweis-overlay').classList.add('open');}
+function closeHinweise(){document.getElementById('hinweis-overlay').classList.remove('open');}
+document.getElementById('hinweis-overlay').addEventListener('click',e=>{
+  if(e.target.id==='hinweis-overlay') closeHinweise();
+});
+
+/* ======================================================================
+   H. KOSTEN- UND WIRKUNGSRECHNER
+   ---------------------------------------------------------------------- */
+function openRechner(){
+  if(!aktuelleFlaeche){alert('Bitte zuerst eine Dachteilfläche anklicken.');return;}
+  document.getElementById('r-flaeche').value=Math.round(aktuelleFlaeche);
+  document.getElementById('rechner-overlay').classList.add('open');
+  rechne();
+}
+function closeRechner(){document.getElementById('rechner-overlay').classList.remove('open');}
+document.getElementById('rechner-overlay').addEventListener('click',e=>{
+  if(e.target.id==='rechner-overlay') closeRechner();
+});
+
+/* Preisdegression über die Projektgröße. Herleitung und Quellenabgleich:
+   KOSTENBASIS.md. Gekappt, damit die Potenzfunktion weder bei 5 m² noch
+   bei 50.000 m² Werte liefert, für die es keinen Beleg gibt. */
+function groessenfaktor(flaeche, auf){
+  const A=ANNAHMEN;
+  if(!(flaeche>0)) return 1;
+  const roh=Math.pow(A.bezugsflaeche_m2/flaeche, auf.degression);
+  return Math.min(A.degression_max, Math.max(A.degression_min, roh));
+}
+
+function setAufbau(a){
+  aktuellerAufbau=a;
+  document.querySelectorAll('#aufbau-kacheln .kachel').forEach(k=>
+    k.classList.toggle('active',k.dataset.aufbau===a));
+  document.getElementById('aufbau-hint').textContent=ANNAHMEN.aufbauten[a].hinweis;
+  rechne();
+}
+
+function rechne(){
+  const A     = ANNAHMEN;
+  const auf   = A.aufbauten[aktuellerAufbau];
+  const flaeche = parseFloat(document.getElementById('r-flaeche').value)||0;
+  const quote = parseFloat(document.getElementById('r-antrag').value);
+  const mitPV = document.getElementById('r-pv').checked;
+  const detail= document.getElementById('r-detail').checked;
+  const ziel  = document.getElementById('ergebnis');
+
+  if(!flaeche){ ziel.innerHTML=''; return; }
+
+  /* --- Kosten als Spanne, auf die Projektgröße umgerechnet.
+         Die Spannen in ANNAHMEN gelten für 100 m²; groessenfaktor()
+         rechnet auf die eingetragene Fläche um. --- */
+  const gf   = groessenfaktor(flaeche, auf);
+  const satzMin = auf.kosten_min*gf, satzMax = auf.kosten_max*gf;
+  let kMin = satzMin*flaeche;
+  let kMax = satzMax*flaeche;
+  /* Die PV-Unterkonstruktion ist Material von der Stange und wird mit
+     der Fläche kaum billiger — sie bleibt deshalb linear. */
+  if(mitPV){
+    kMin += A.pv_aufschlag_min*flaeche;
+    kMax += A.pv_aufschlag_max*flaeche;
+  }
+
+  /* --- Förderung. Greift erst ab der Mindestfläche und ist je Gebäude
+         gedeckelt. --- */
+  const foerderfaehig = flaeche >= A.foerder_mindestflaeche_m2;
+  const fMin = foerderfaehig ? Math.min(kMin*quote, A.foerder_hoechstbetrag) : 0;
+  const fMax = foerderfaehig ? Math.min(kMax*quote, A.foerder_hoechstbetrag) : 0;
+  const eigenMin = kMin - fMin;
+  const eigenMax = kMax - fMax;
+
+  /* --- Wirkung --- */
+  const gewichtMin = auf.gewicht_min*flaeche/1000;   // Tonnen
+  const gewichtMax = auf.gewicht_max*flaeche/1000;
+  const rueckhalt  = flaeche*(A.niederschlag_mm/1000)*auf.rueckhalt;  // m³/a
+
+  /* --- Gebühr. Alle drei Aufbauten liegen über der Mindeststärke von
+         5 cm, die Prüfung bleibt trotzdem stehen — falls jemand die
+         Substratstärken oben ändert. --- */
+  const gebuehrBerechtigt = auf.substrat_cm >= A.gebuehr_mindestsubstrat_cm;
+  const gebuehrVoll  = flaeche*A.gebuehr_pro_m2;
+  const gebuehrSpar  = gebuehrBerechtigt ? gebuehrVoll*A.gebuehr_ermaessigung : 0;
+
+  /* --- Laufende Kosten --- */
+  const pflege     = flaeche*A.pflege_gruendach;
+  const mehrpflege = flaeche*(A.pflege_gruendach-A.pflege_schwarzdach);
+  const jahresSaldo= gebuehrSpar - mehrpflege;
+  const deckung    = mehrpflege>0 ? gebuehrSpar/mehrpflege*100 : 0;
+
+  /* --- Ausgabe --- */
+  let h = '';
+
+  h += '<div class="erg-haupt">'
+     + '<div class="erg-label">Eigenanteil nach Förderung</div>'
+     + '<div class="erg-val">'+eur(eigenMin)+' – '+eur(eigenMax)
+     + ' <small>brutto</small></div></div>';
+
+  h += '<div class="erg-zeile"><span class="k">Investition '+auf.name
+     + (mitPV?' + PV-Unterkonstruktion':'')
+     + '</span><span class="v">'+eur(kMin)+' – '+eur(kMax)+'</span></div>';
+
+  h += '<div class="erg-zeile"><span class="k">Ansatz je m² bei '
+     + Math.round(flaeche).toLocaleString('de-DE')+' m² Projektgröße</span>'
+     + '<span class="v">'+eur(satzMin)+' – '+eur(satzMax)+'</span></div>';
+
+  /* Der Größeneffekt wird ausgewiesen, nicht versteckt: Er ist der
+     häufigste Grund dafür, dass zwei Angebote für dasselbe Dach um den
+     Faktor zwei auseinanderliegen. */
+  if(Math.abs(gf-1)>0.005){
+    const proz = Math.round(Math.abs(gf-1)*100);
+    h += '<div class="erg-zeile"><span class="k">darin Größeneffekt gegenüber '
+       + ANNAHMEN.bezugsflaeche_m2+' m² Bezugsgröße</span><span class="v">'
+       + (gf<1?'− ':'+ ')+proz+' %</span></div>';
+  }
+
+  if(foerderfaehig && quote>0){
+    h += '<div class="erg-zeile abzug"><span class="k">Förderung IFB Hamburg ('
+       + Math.round(quote*100)+' %)</span><span class="v">− '+eur(fMin)+' – '+eur(fMax)
+       + '</span></div>';
+  } else if(!foerderfaehig){
+    h += '<div class="erg-zeile"><span class="k">Förderung</span>'
+       + '<span class="v">nicht förderfähig</span></div>';
+  }
+
+  h += '<div class="erg-zeile"><span class="k">je m² Dachfläche</span><span class="v">'
+     + eur(eigenMin/flaeche)+' – '+eur(eigenMax/flaeche)+'</span></div>';
+
+  if(detail){
+    h += '<div class="erg-block"><div class="erg-gruppe-titel">Wirkung</div>';
+    h += '<div class="erg-zeile"><span class="k">Regenrückhalt '
+       + Math.round(auf.rueckhalt*100)+' % des Jahresniederschlags</span>'
+       + '<span class="v">'+Math.round(rueckhalt).toLocaleString('de-DE')+' m³/a</span></div>';
+    h += '<div class="erg-zeile"><span class="k">Auflast gesättigt</span><span class="v">'
+       + f1(gewichtMin)+' – '+f1(gewichtMax)+' t</span></div>';
+    h += '<div class="erg-zeile"><span class="k">Substratstärke</span><span class="v">'
+       + auf.substrat_cm+' cm</span></div>';
+    h += '</div>';
+
+    h += '<div class="erg-block"><div class="erg-gruppe-titel">Laufend, je Jahr</div>';
+    h += '<div class="erg-zeile"><span class="k">Niederschlagswassergebühr ohne Gründach'
+       + '</span><span class="v">'+eur(gebuehrVoll)+'</span></div>';
+    h += '<div class="erg-zeile abzug"><span class="k">Ermäßigung '
+       + Math.round(A.gebuehr_ermaessigung*100)+' % (gesplittete Gebühr)</span>'
+       + '<span class="v">− '+eur(gebuehrSpar)+'</span></div>';
+    h += '<div class="erg-zeile"><span class="k">Pflege Gründach</span><span class="v">'
+       + eur(pflege)+'</span></div>';
+    h += '<div class="erg-zeile"><span class="k">davon Mehraufwand gegenüber Schwarzdach'
+       + '</span><span class="v">'+eur(mehrpflege)+'</span></div>';
+    h += '</div>';
+  }
+
+  /* --- Einordnung. Die Gebührenersparnis trägt die Mehrpflege, mehr
+         nicht — genau der Befund, den die wissenschaftliche Begleitung
+         der Hamburger Strategie formuliert hat ("Mitnahmeeffekt zur
+         Deckung der Pflegekosten"). Der Rechner sagt das offen, statt
+         eine Amortisationszahl zu konstruieren. --- */
+  h += '<div class="erg-fazit">';
+  if(gebuehrSpar>0){
+    h += 'Die ermäßigte Niederschlagswassergebühr spart <strong>'+eur(gebuehrSpar)
+       + ' im Jahr</strong> und deckt damit <strong>'+Math.round(deckung)+' %</strong> '
+       + 'des Pflegemehraufwands gegenüber einem Schwarzdach. ';
+    h += jahresSaldo>=0
+      ? 'Unterm Strich bleibt ein jährlicher Vorteil von '+eur(jahresSaldo)+'. '
+      : 'Es verbleiben '+eur(-jahresSaldo)+' Mehrkosten im Jahr. ';
+    h += 'Über '+ANNAHMEN.zeitraum_jahre+' Jahre summiert sich die Ersparnis auf '
+       + eur(gebuehrSpar*ANNAHMEN.zeitraum_jahre)+'. Der wirtschaftliche Kern liegt '
+       + 'jedoch nicht in der Gebühr, sondern in der längeren Lebensdauer der '
+       + 'Abdichtung: Sie erspart die Sanierung, die beim Schwarzdach nach etwa '
+       + '20 Jahren ansteht.';
+  }
+  h += '</div>';
+
+  h += '<div class="warnung"><span><b>Orientierungswerte.</b> Statik, Planung, Gerüst '
+     + 'und Genehmigung sind nicht enthalten; im Bestand entscheidet die '
+     + 'Tragreserve über die Machbarkeit. Die Fördersätze geben den Stand der '
+     + 'IFB-Richtlinie wieder, maßgeblich ist allein diese. Die Potenzialfläche '
+     + 'stammt aus dem Modell von 2022 und ist nicht am Luftbild geprüft.</span></div>';
+
+  ziel.innerHTML=h;
+}
+
+/* ======================================================================
+   I. GRÜNDACHMELDER
+   ======================================================================
+   Warum der Melder so gebaut ist, wie er gebaut ist: Der Atlas ist eine
+   einzelne HTML-Datei ohne Server. Er kann eine Meldung deshalb nicht
+   entgegennehmen — er kann sie nur vollständig aufbereiten und der
+   meldenden Person in die Hand geben. Am Ende stehen drei Wege: Datei
+   sichern, Text kopieren, E-Mail öffnen. Abgeschickt oder gespeichert
+   wird nichts ohne Zutun; das ist keine Einschränkung, sondern die
+   ehrlichste Form, die eine statische Seite anbieten kann.
+
+   Erhoben werden genau die drei Angaben, die der Atlas braucht — Ort,
+   Dachfläche, begrünte Fläche. Alles Weitere ist freiwillig.
+
+   Für den Ort gibt es zwei Wege:
+     1. Dach anklicken. Liegt das Gebäude in Dachflächen Hamburg, sind
+        Geometrie und Fläche bereits da. Der Melder summiert dann alle
+        Teilflächen desselben Gebäudes, denn gemeldet wird ein Dach,
+        keine Teilfläche.
+     2. Selbst einzeichnen. Für Gebäude, die im Datensatz fehlen —
+        Neubauten, Anbauten, Garagen. Die Fläche wird geodätisch aus den
+        Stützpunkten gerechnet; sie ist eine Grundfläche, bei geneigten
+        Dächern also kleiner als die Dachhaut.
+
+   Eine Adressensuche gibt es bewusst nicht: Sie hieße, jeden Tastendruck
+   an einen fremden Geocoder zu schicken. Die Adresse ist ein freiwilliges
+   Textfeld, der Ort steckt im Kartenklick.
+   ---------------------------------------------------------------------- */
+
+/* >>> HIER EIN- UND AUSSCHALTEN <<<
+   false: Der Knopf „Gründach melden" steht in der Seitenleiste, ist aber
+          nicht anklickbar. Der gesamte Melder darunter bleibt unberührt
+          im Code liegen und wird nicht ausgeführt.
+   true : Der Melder ist in Betrieb.
+   Mehr braucht es nicht — Knopf, Beschriftung und Einstiegspunkt lesen
+   alle von hier. */
+const MELDER_AKTIV = false;
+
+/* Wer Meldungen entgegennimmt, trägt hier eine Adresse ein. Bleibt das
+   Feld leer, zeigt der Melder den E-Mail-Weg gar nicht erst an — eine
+   Adresse im Quelltext einer öffentlichen Seite wird abgegriffen, und
+   das soll niemandem ungefragt passieren. */
+const MELDER_EMPFAENGER = '';
+
+const melder = {
+  modus:null,        /* null | 'dach' | 'zeichnen' */
+  quelle:null,       /* 'dachflaechen' | 'gezeichnet' */
+  gebaeudeId:null,
+  punkt:null,        /* L.LatLng — der Ort der Meldung */
+  punkte:[],         /* Stützpunkte beim Einzeichnen */
+  flaeche:null,      /* m² aus der Geometrie */
+  teilflaechen:null,
+  vorschau:null,     /* Polygon beim Zeichnen */
+  ecken:[],          /* Eckpunkt-Marker beim Zeichnen */
+  markiert:[]        /* hervorgehobene Flächen der Bestandsebene */
+};
+
+/* Ein Gebäude hat in der Potenzialebene mehrere Teilflächen. Für die
+   Meldung zählt das ganze Dach, also wird einmal aufsummiert. */
+const gebaeudeIndex = new Map();
+function indexGebaeude(fc){
+  if(!fc) return;
+  fc.features.forEach(f=>{
+    const id=f.properties.gebaeude_id; if(!id) return;
+    const e=gebaeudeIndex.get(id)||{netto:0,gruen:0,n:0};
+    e.netto += (+f.properties.netto_m2||0);
+    e.gruen += (+f.properties.gruen_m2||0);
+    e.n++;
+    gebaeudeIndex.set(id,e);
+  });
+}
+
+/* Geodätische Fläche eines Polygons auf der Kugel, in m². Dieselbe
+   Formel, die Leaflet.draw verwendet; sie hier zu führen erspart eine
+   weitere Abhängigkeit. */
+function flaecheAusPunkten(punkte){
+  if(!punkte || punkte.length<3) return 0;
+  const R=6378137, rad=Math.PI/180;
+  let summe=0;
+  for(let i=0;i<punkte.length;i++){
+    const a=punkte[i], b=punkte[(i+1)%punkte.length];
+    summe += (b.lng-a.lng)*rad*(2+Math.sin(a.lat*rad)+Math.sin(b.lat*rad));
+  }
+  return Math.abs(summe*R*R/2);
+}
+
+/* --- Dialog ---------------------------------------------------------- */
+
+/* Setzt Knopf und Beschriftung auf den Stand von MELDER_AKTIV. Läuft
+   einmal beim Laden. */
+function melderSchalterSetzen(){
+  document.getElementById('btn-melder').disabled = !MELDER_AKTIV;
+  document.getElementById('melder-note').textContent = MELDER_AKTIV
+    ? 'Ein begrüntes Dach, das hier fehlt oder falsch steht? Lage, Dachfläche '
+      + 'und begrünte Fläche erfassen und als Meldung sichern.'
+    : 'In Vorbereitung. Hier wird sich später ein fehlendes Gründach melden '
+      + 'lassen — mit Lage, Dachfläche und begrünter Fläche.';
+}
+
+function oeffneMelder(){
+  /* Zweite Sperre neben dem disabled-Attribut: Ein Aufruf aus der Konsole
+     oder aus einem späteren Knopf läuft sonst am Schalter vorbei. */
+  if(!MELDER_AKTIV) return;
+  document.getElementById('melder-overlay').classList.add('open');
+  melderOrtZeigen();
+  melderPruefe();
+}
+function schliesseMelder(){
+  document.getElementById('melder-overlay').classList.remove('open');
+}
+document.getElementById('melder-overlay').addEventListener('click',e=>{
+  if(e.target.id==='melder-overlay') schliesseMelder();
+});
+
+/* --- Ortsbestimmung --------------------------------------------------- */
+function melderModus(m){
+  melderSpurenLoeschen();
+  melder.modus=m;
+  melder.quelle=null; melder.punkt=null; melder.flaeche=null;
+  melder.gebaeudeId=null; melder.teilflaechen=null; melder.punkte=[];
+  schliesseMelder();
+  document.getElementById('map').classList.add('melden');
+
+  if(m==='dach'){
+    /* Die Teilflächen müssen sichtbar sein, sonst klickt man ins Leere. */
+    wechsleEbene('pot');
+    melderBar('Klicke das Dach an, um das es geht. Die eingeblendeten '
+            + 'Umrisse stammen aus Dachflächen Hamburg.', false);
+  }else{
+    map.doubleClickZoom.disable();
+    melderBar('Setze mit Klicks die Ecken des Dachs. Drei Punkte genügen.', true);
+  }
+}
+
+function melderBar(text, zeichnen){
+  document.getElementById('mb-text').textContent=text;
+  document.getElementById('mb-zurueck').style.display = zeichnen?'':'none';
+  document.getElementById('mb-fertig').style.display  = zeichnen?'':'none';
+  document.getElementById('mb-zahl').textContent='';
+  document.getElementById('melder-bar').classList.add('offen');
+  melderZeichenstand();
+}
+
+function melderBarZu(){
+  document.getElementById('melder-bar').classList.remove('offen');
+  document.getElementById('map').classList.remove('melden');
+}
+
+/* Weg 1: eine vorhandene Fläche übernehmen. */
+function melderNimmFlaeche(feat,lyr,ebeneKey){
+  const p=feat.properties;
+  melderSpurenLoeschen();
+
+  if(ebeneKey==='pot'){
+    const id=p.gebaeude_id, e=id?gebaeudeIndex.get(id):null;
+    melder.gebaeudeId=id||null;
+    melder.flaeche = e ? e.netto : (+p.netto_m2||0);
+    melder.teilflaechen = e ? e.n : 1;
+    melderVorbelegen(melder.flaeche, e ? e.gruen : (+p.gruen_m2||0));
+    /* Alle Teilflächen desselben Gebäudes hervorheben, nicht nur die
+       angeklickte — sonst wirkt die übernommene Fläche zu groß. */
+    if(id && layers.pot){
+      layers.pot.eachLayer(l=>{
+        if(l.feature && l.feature.properties.gebaeude_id===id){
+          l.setStyle(STIL_MARKIERT); melder.markiert.push(l);
+        }
+      });
+    }
+  }else{
+    melder.gebaeudeId=p.gebaeude_id||null;
+    melder.flaeche=+p.dach_m2||0;
+    melder.teilflaechen=null;
+    melderVorbelegen(melder.flaeche, p.gruen_m2);
+    lyr.setStyle(STIL_MARKIERT); melder.markiert.push(lyr);
+  }
+
+  melder.quelle='dachflaechen';
+  /* Gemeldet wird ein Dach, also liegt der Ort in der Mitte aller
+     Teilflächen des Gebäudes — nicht in der Mitte der einen, die
+     zufällig getroffen wurde. */
+  let umfang=lyr.getBounds();
+  melder.markiert.forEach(l=>{ umfang=umfang.extend(l.getBounds()); });
+  melder.punkt=umfang.getCenter();
+  melder.modus=null;
+  melderBarZu();
+  oeffneMelder();
+}
+
+const STIL_MARKIERT={color:'#111111',weight:2.6,fillColor:'#2E6B3E',
+                     fillOpacity:.55,dashArray:null};
+
+function melderVorbelegen(dach,gruen){
+  const fd=document.getElementById('m-dach');
+  if(dach>0) fd.value=Math.round(dach);
+  const fg=document.getElementById('m-gruen');
+  /* Der Modellwert ist ein Vorschlag, kein Befund — er steht nur da,
+     wenn das Feld noch leer ist, und ist jederzeit überschreibbar. */
+  if(!fg.value && gruen>0) fg.value=Math.round(gruen);
+}
+
+/* Weg 2: selbst einzeichnen. */
+function melderPunktSetzen(latlng){
+  if(melder.modus!=='zeichnen') return;
+  melder.punkte.push(latlng);
+  melderVorschau();
+  melderZeichenstand();
+}
+function melderPunktZurueck(){
+  if(melder.modus!=='zeichnen' || !melder.punkte.length) return;
+  melder.punkte.pop();
+  melderVorschau();
+  melderZeichenstand();
+}
+function melderVorschau(){
+  if(melder.vorschau){ map.removeLayer(melder.vorschau); melder.vorschau=null; }
+  melder.ecken.forEach(m=>map.removeLayer(m)); melder.ecken=[];
+  melder.punkte.forEach(pt=>{
+    melder.ecken.push(L.circleMarker(pt,{radius:4,color:'#111111',weight:2,
+      fillColor:'#FFFFFF',fillOpacity:1}).addTo(map));
+  });
+  if(melder.punkte.length>=2){
+    melder.vorschau = (melder.punkte.length>=3
+      ? L.polygon(melder.punkte,{color:'#111111',weight:2,
+          fillColor:'#2E6B3E',fillOpacity:.35})
+      : L.polyline(melder.punkte,{color:'#111111',weight:2,dashArray:'4,4'})
+    ).addTo(map);
+  }
+}
+function melderZeichenstand(){
+  if(melder.modus!=='zeichnen') return;
+  const n=melder.punkte.length, a=flaecheAusPunkten(melder.punkte);
+  document.getElementById('mb-zahl').textContent =
+    n<3 ? n+' von 3 Punkten' : n+' Punkte · '+m2(a);
+  document.getElementById('mb-fertig').disabled = n<3;
+  document.getElementById('mb-zurueck').disabled = n===0;
+}
+function melderZeichnenFertig(){
+  if(melder.punkte.length<3) return;
+  melder.flaeche=flaecheAusPunkten(melder.punkte);
+  melder.quelle='gezeichnet';
+  melder.gebaeudeId=null; melder.teilflaechen=null;
+  melder.punkt=L.polygon(melder.punkte).getBounds().getCenter();
+  melder.modus=null;
+  map.doubleClickZoom.enable();
+  melderBarZu();
+  melderVorbelegen(melder.flaeche,0);
+  oeffneMelder();
+}
+
+function melderAbbrechen(){
+  melder.modus=null;
+  melder.punkte=[];
+  map.doubleClickZoom.enable();
+  melderVorschau();
+  melderBarZu();
+  oeffneMelder();
+}
+function melderOrtVerwerfen(){
+  melderSpurenLoeschen();
+  melder.quelle=null; melder.punkt=null; melder.flaeche=null;
+  melder.gebaeudeId=null; melder.teilflaechen=null; melder.punkte=[];
+  melderOrtZeigen(); melderPruefe();
+}
+function melderSpurenLoeschen(){
+  melder.markiert.forEach(l=>{ if(layers.pot&&layers.pot.hasLayer(l)) layers.pot.resetStyle(l);
+                               else if(layers.gd&&layers.gd.hasLayer(l)) layers.gd.resetStyle(l); });
+  melder.markiert=[];
+  if(melder.vorschau){ map.removeLayer(melder.vorschau); melder.vorschau=null; }
+  melder.ecken.forEach(m=>map.removeLayer(m)); melder.ecken=[];
+}
+
+/* --- Anzeige und Prüfung ---------------------------------------------- */
+function melderOrtZeigen(){
+  const fertig=!!melder.punkt;
+  document.getElementById('ms-ort').classList.toggle('erledigt',fertig);
+  document.getElementById('melder-wahl').style.display      = fertig?'none':'';
+  document.getElementById('melder-wahl-hint').style.display = fertig?'none':'';
+  document.getElementById('melder-neu').style.display       = fertig?'':'none';
+  const ziel=document.getElementById('melder-ort-text');
+  ziel.style.display = fertig?'':'none';
+  if(!fertig) return;
+
+  const koord=f6(melder.punkt.lat)+', '+f6(melder.punkt.lng);
+  ziel.innerHTML = melder.quelle==='gezeichnet'
+    ? '<b>Selbst eingezeichnet</b> — '+melder.punkte.length+' Punkte, '
+      +m2(melder.flaeche)+' Grundfläche.<br>Mittelpunkt '+koord+'.'
+    : '<b>Aus Dachflächen Hamburg</b> — '
+      +(melder.teilflaechen ? melder.teilflaechen+' Teilfläche'
+          +(melder.teilflaechen>1?'n':'')+', zusammen '+m2(melder.flaeche)
+        : m2(melder.flaeche))
+      +'.<br>Mittelpunkt '+koord
+      +(melder.gebaeudeId?' · Gebäude '+melder.gebaeudeId:'')+'.';
+}
+
+const f6=v=>(Math.round(v*1e6)/1e6).toFixed(6);
+
+function melderPruefe(){
+  const dach =parseFloat(document.getElementById('m-dach').value);
+  const gruen=parseFloat(document.getElementById('m-gruen').value);
+  const hatDach =!isNaN(dach)&&dach>0;
+  const hatGruen=!isNaN(gruen)&&gruen>=0;
+
+  document.getElementById('ms-flaeche').classList.toggle('erledigt',
+    hatDach&&hatGruen&&gruen<=dach);
+
+  let fehler=null;
+  if(!melder.punkt)          fehler='Bestimme zuerst den Ort des Dachs.';
+  else if(!hatDach)          fehler='Trage die Dachfläche ein.';
+  else if(!hatGruen)         fehler='Trage die begrünte Fläche ein — auch eine 0 ist eine Angabe.';
+  else if(gruen>dach)        fehler='Die begrünte Fläche kann nicht größer sein als die Dachfläche.';
+
+  const hint=document.getElementById('m-anteil-hint');
+  const grund='Geschätzte Werte genügen. Gemeint ist die Fläche, auf der '
+            + 'tatsächlich Vegetation steht — ohne Kiesstreifen, Wege und Aufbauten.';
+  hint.textContent = (hatDach&&hatGruen&&gruen<=dach)
+    ? grund+' Das sind '+f1(gruen/dach*100)+' % des Dachs.'
+    : grund;
+
+  const ziel=document.getElementById('melder-ausgabe');
+  if(fehler){
+    ziel.innerHTML='<div class="warnung"><span>'+fehler+'</span></div>';
+    return;
+  }
+  let h='<button class="btn-primaer" onclick="melderSichern()">'
+       +'Meldung als Datei sichern (GeoJSON)</button>';
+  /* Der E-Mail-Weg erscheint nur, wenn oben ein Empfänger steht. Sonst
+     bleibt es beim Textknopf über die volle Breite — ein zweiter Knopf
+     mit derselben Wirkung wäre nur Beiwerk. */
+  h+= MELDER_EMPFAENGER
+    ? '<div class="paar" style="margin-top:8px">'
+      +'<button class="flat-btn" style="margin:0" onclick="melderKopieren(this)">Als Text kopieren</button>'
+      +'<button class="flat-btn" style="margin:0" onclick="melderMail()">E-Mail öffnen</button></div>'
+    : '<button class="flat-btn" style="margin:8px 0 0" onclick="melderKopieren(this)">'
+      +'Als Text kopieren</button>';
+  h+='<div class="feld-hint" style="margin-top:8px">Die Datei enthält Geometrie und '
+    +'Angaben in einem Format, das sich direkt in QGIS öffnen und in den Atlas '
+    +'übernehmen lässt.'
+    +(MELDER_EMPFAENGER?'':' Ein Empfänger ist in dieser Fassung nicht hinterlegt — '
+      +'schicke die Datei oder den Text an die Stelle, die den Atlas pflegt.')
+    +'</div>';
+  ziel.innerHTML=h;
+}
+
+/* --- Ausgabe ---------------------------------------------------------- */
+function melderMeldung(){
+  const dach =parseFloat(document.getElementById('m-dach').value)||0;
+  const gruen=parseFloat(document.getElementById('m-gruen').value)||0;
+  const wert=id=>{const v=document.getElementById(id).value.trim();return v||null;};
+  const geometrie = (melder.quelle==='gezeichnet' && melder.punkte.length>=3)
+    ? {type:'Polygon',coordinates:[
+        melder.punkte.map(pt=>[+f6(pt.lng),+f6(pt.lat)])
+          .concat([[+f6(melder.punkte[0].lng),+f6(melder.punkte[0].lat)]])]}
+    : {type:'Point',coordinates:[+f6(melder.punkt.lng),+f6(melder.punkt.lat)]};
+  return {
+    type:'Feature',
+    geometry:geometrie,
+    properties:{
+      gemeldet_am: new Date().toISOString().slice(0,10),
+      adresse: wert('m-adresse'),
+      dach_m2: Math.round(dach),
+      gruen_m2: Math.round(gruen),
+      anteil_prozent: dach>0 ? Math.round(gruen/dach*1000)/10 : null,
+      aufbau: document.getElementById('m-aufbau').value,
+      begruent_seit: wert('m-jahr'),
+      anmerkung: wert('m-anmerkung'),
+      kontakt: wert('m-kontakt'),
+      ortsquelle: melder.quelle==='gezeichnet'
+        ? 'selbst eingezeichnet' : 'Dachflächen Hamburg (angeklickt)',
+      gebaeude_id: melder.gebaeudeId,
+      erfasst_mit: 'Wilhelmsburger Gründach-Atlas v6.2'
+    }
+  };
+}
+
+function melderText(){
+  const p=melderMeldung().properties, g=melderMeldung().geometry;
+  const mp = g.type==='Point' ? g.coordinates
+           : [+f6(melder.punkt.lng),+f6(melder.punkt.lat)];
+  const zeilen=[
+    'Meldung eines Gründachs — Wilhelmsburger Gründach-Atlas',
+    'Gemeldet am: '+p.gemeldet_am,
+    '',
+    'Ort:              '+(p.adresse||'(keine Adresse angegeben)'),
+    'Koordinaten:      '+mp[1]+', '+mp[0]+' (WGS 84)',
+    'Herkunft der Lage: '+p.ortsquelle,
+    p.gebaeude_id ? 'Gebäude-ID:       '+p.gebaeude_id : null,
+    '',
+    'Dachfläche:       '+p.dach_m2+' m²',
+    'Begrünte Fläche:  '+p.gruen_m2+' m²  ('+p.anteil_prozent+' %)',
+    'Aufbau:           '+p.aufbau,
+    p.begruent_seit ? 'Begrünt seit:     '+p.begruent_seit : null,
+    p.anmerkung ? '\nAnmerkung: '+p.anmerkung : null,
+    p.kontakt ? 'Kontakt:   '+p.kontakt : null
+  ];
+  return zeilen.filter(z=>z!==null).join('\n');
+}
+
+function melderSichern(){
+  const inhalt=JSON.stringify(
+    {type:'FeatureCollection',features:[melderMeldung()]},null,2);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([inhalt],{type:'application/geo+json'}));
+  a.download='gruendach-meldung-'+new Date().toISOString().slice(0,10)+'.geojson';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+
+function melderKopieren(knopf){
+  const txt=melderText(), melde=()=>{
+    const alt=knopf.textContent; knopf.textContent='Kopiert';
+    setTimeout(()=>{knopf.textContent=alt;},1600);
+  };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(txt).then(melde,()=>melderKopierenNotfall(txt,melde));
+  }else melderKopierenNotfall(txt,melde);
+}
+/* Ohne HTTPS gibt es keine Zwischenablage-API — beim lokalen Prüfen über
+   python3 -m http.server ist das der Regelfall. */
+function melderKopierenNotfall(txt,melde){
+  const t=document.createElement('textarea');
+  t.value=txt; t.style.position='fixed'; t.style.opacity='0';
+  document.body.appendChild(t); t.select();
+  try{ document.execCommand('copy'); melde(); }
+  catch(e){ window.prompt('Text mit Strg+C kopieren:',txt); }
+  document.body.removeChild(t);
+}
+
+function melderMail(){
+  if(!MELDER_EMPFAENGER) return;
+  window.location.href='mailto:'+encodeURIComponent(MELDER_EMPFAENGER)
+    +'?subject='+encodeURIComponent('Gründach-Meldung Wilhelmsburg')
+    +'&body='+encodeURIComponent(melderText());
+}
+
+/* Klicks auf die Karte selbst — nur beim Einzeichnen von Belang. */
+map.on('click',e=>{ if(melder.modus==='zeichnen') melderPunktSetzen(e.latlng); });
+
+/* Die Leiste liegt im Kartencontainer; ohne das hier würde ein Klick auf
+   „Fertig" zugleich einen Stützpunkt setzen und das Scrollen darüber die
+   Karte zoomen. */
+L.DomEvent.disableClickPropagation(document.getElementById('melder-bar'));
+L.DomEvent.disableScrollPropagation(document.getElementById('melder-bar'));
+
+/* Escape bricht ab, was gerade offen ist. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(melder.modus){ melderAbbrechen(); return; }
+  ['melder-overlay','rechner-overlay','hinweis-overlay'].forEach(id=>
+    document.getElementById(id).classList.remove('open'));
+});
+
+/* ======================================================================
+   J. LADEN
+   ---------------------------------------------------------------------- */
+async function hole(pfad){
+  try{
+    const r=await fetch(pfad);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){ console.warn('Layer nicht geladen:',pfad,e.message); return null; }
+}
+
+(async()=>{
+  const bar=document.getElementById('ladebalken');
+  bar.style.width='15%';
+  const [s,g22,g24,pot]=await Promise.all([
+    hole('data/statistik.json'),
+    hole('data/gruendaecher_2022.geojson'),
+    hole('data/gruendaecher_2024.geojson'),
+    hole('data/potenzialflaechen.geojson')
+  ]);
+  bar.style.width='80%';
+  stat=s; daten.gd_2022=g22; daten.gd_2024=g24; daten.pot=pot;
+
+  if(pot){ baueLayer('pot',pot,stylePot,klickPot); indexGebaeude(pot); }
+  if(g22) baueLayer('gd',g22,styleGd,klickGd);
+
+  /* setEbene setzt Beschriftungen, Sichtbarkeiten, das passende Luftbild
+     und die Statistik in einem Zug — damit der Startzustand denselben
+     Weg nimmt wie jeder spätere Wechsel. */
+  wechsleEbene('gd');
+  setAufbau('extensiv');
+  melderSchalterSetzen();
+
+  /* Erst im nächsten Frame einpassen: Zum Zeitpunkt des Ladens steht das
+     Flex-Layout noch nicht, Leaflet rechnet dann mit einer falschen
+     Containergröße und zoomt viel zu nah heran. */
+  requestAnimationFrame(()=>{
+    map.invalidateSize();
+    if(g22&&layers.gd){
+      const b=layers.gd.getBounds();
+      if(b.isValid()) map.fitBounds(b,{padding:[30,30]});
+    }
+  });
+  bar.style.width='100%';
+  setTimeout(()=>bar.style.opacity='0',400);
+})();
+</script>
+</body>
+</html>

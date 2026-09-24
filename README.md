@@ -1,4 +1,4 @@
-# Wilhelmsburger Gründach-Atlas — Version 6.2
+# Wilhelmsburger Gründach-Atlas — Version 6.3
 
 Interaktive Karte zum Gründachbestand und zum Begrünungspotenzial auf der
 Elbinsel Wilhelmsburg (Masterthesis, Fabian Schlag).
@@ -19,6 +19,12 @@ Version 5.5 bleibt unter
 - Überarbeiteter Kosten- und Wirkungsrechner: Die Kostenspannen beziehen sich
   auf eine Projektgröße von 100 m² und werden auf die tatsächliche Fläche
   umgerechnet — kleinere Dächer sind je m² teurer, größere deutlich billiger
+- Der Rechner kennt zwei Bezüge: die angeklickte Dachteilfläche und die Summe
+  aller unbegrünten Teilflächen desselben Gebäudes. Nur auf Gebäudeebene greifen
+  der Größeneffekt und der Förderhöchstbetrag, der je Gebäude gilt
+- Geneigte Dächer erhalten ab 5° einen Zuschlag für die Schubsicherung, und der
+  Mengennachlass fällt dort geringer aus als auf dem Flachdach — ein Sheddach
+  ist kein großes Flachdach
 
 ## Inhalt
 
@@ -49,7 +55,9 @@ als geeignet ausgewiesene Fläche ist ein Hinweis, keine Zusage.
 
 Die Werte des Kostenrechners sind Orientierungswerte. Statik, Planung, Gerüst,
 Genehmigung und die Dachabdichtung selbst sind nicht enthalten. Maßgeblich für
-die Förderung ist allein die Richtlinie der IFB Hamburg.
+die Förderung ist allein die Richtlinie der IFB Hamburg. Der Gebäudebezug ist
+die unsicherere der beiden Angaben: Er summiert modellierte Teilflächen und
+unterstellt, dass alle tragfähig sind und in einem Zug umgesetzt werden.
 
 Einzelheiten stehen in der Anwendung unter „Datengrundlage und Lesehinweise".
 

@@ -242,6 +242,9 @@ body{
 /* Auswahl als Kacheln statt Auswahlliste — der Aufbau ist die
    wichtigste Entscheidung und soll vergleichbar nebeneinander stehen. */
 .kachel-reihe{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.kachel-reihe.zwei{grid-template-columns:1fr 1fr}
+.kachel:disabled{opacity:.45;cursor:not-allowed}
+.kachel:disabled:hover{background:var(--weiss)}
 .kachel{
   padding:9px 7px;background:var(--weiss);border:1px solid var(--linie);
   border-radius:var(--radius);cursor:pointer;text-align:center;
@@ -506,6 +509,7 @@ body{
     <div class="info-row"><span class="info-key">Neigung</span><span class="info-val" id="p-slope">–</span></div>
     <div class="info-row"><span class="info-key">Ausrichtung</span><span class="info-val" id="p-aspect">–</span></div>
     <div class="info-row"><span class="info-key">Zustand</span><span class="info-val" id="p-status">–</span></div>
+    <div class="info-row" id="p-gebaeude" style="display:none"><span class="info-key">Dach gesamt unbegrünt</span><span class="info-val">–</span></div>
     <button class="btn-calc" onclick="openRechner()">Kosten und Wirkung berechnen</button>
   </div>
 </div>
@@ -600,16 +604,30 @@ body{
       <div class="feld-hint" id="aufbau-hint"></div>
     </div>
 
+    <!-- Bezug: Die Größendegression macht den Unterschied zwischen einer
+         Teilfläche und dem ganzen Dach zu einer Preisfrage. Beide Zahlen
+         stehen deshalb nebeneinander, statt dass eine Abfrage nach ihnen
+         fragt — ein Klick weniger, und man sieht sofort, worum es geht. -->
+    <div class="feld">
+      <label>Bezug</label>
+      <div class="kachel-reihe zwei" id="bezug-kacheln">
+        <button class="kachel active" data-bezug="teil" onclick="setBezug('teil')">
+          <b>Diese Teilfläche</b><span id="bz-teil">–</span></button>
+        <button class="kachel" data-bezug="gebaeude" id="bz-btn-gebaeude" onclick="setBezug('gebaeude')">
+          <b>Ganzes Gebäude</b><span id="bz-geb">–</span></button>
+      </div>
+      <div class="feld-hint" id="bezug-hint"></div>
+    </div>
+
     <div class="feld">
       <label>Fläche</label>
       <input type="number" id="r-flaeche" min="1" max="100000" step="1" oninput="rechne()"/>
-      <div class="feld-hint">Übernommen aus der angeklickten Teilfläche. Für eine
-        Teilbegrünung kannst du den Wert überschreiben. Gerechnet wird mit der
-        ganzen Dachfläche — tatsächlich bepflanzt wird weniger, da Randstreifen,
-        Wartungswege und Aufbauten erfahrungsgemäß 10 bis 20 % beanspruchen; für
-        die Förderung zählt allein diese Nettovegetationsfläche. Bei mehreren
-        Teilflächen auf einem Dach lohnt es sich, die Summe einzutragen: Der
-        Rechner bildet den Größeneffekt ab.</div>
+      <div class="feld-hint">Für eine Teilbegrünung kannst du den Wert
+        überschreiben; die Neigungsmischung des gewählten Bezugs bleibt dabei
+        erhalten. Gerechnet wird mit der ganzen Dachfläche — tatsächlich
+        bepflanzt wird weniger, da Randstreifen, Wartungswege und Aufbauten
+        erfahrungsgemäß 10 bis 20 % beanspruchen; für die Förderung zählt allein
+        diese Nettovegetationsfläche.</div>
     </div>
 
     <div class="feld">
@@ -751,8 +769,10 @@ body{
 
    >>> Seit v6.2 gelten die Kostenspannen für ein Projekt von 100 m².
        Darunter wird es je m² teurer, darüber billiger; die Funktion
-       groessenfaktor() rechnet das um. Herleitung und Quellenabgleich
-       stehen in KOSTENBASIS.md.
+       groessenfaktor() rechnet das um.
+   >>> Seit v6.3 kommt für geneigte Dächer ein Zuschlag für die
+       Schubsicherung hinzu, und der Boden der Degression hängt an der
+       Dachform. Herleitung und Quellenabgleich: KOSTENBASIS.md.
    ---------------------------------------------------------------------- */
 const ANNAHMEN = {
 
@@ -832,7 +852,8 @@ const ANNAHMEN = {
 
      Modell: faktor = (bezugsflaeche / A)^degression, gekappt, damit die
      Funktion an den Rändern nicht ins Unplausible läuft. Die Kappung nach
-     unten greift ab rund 1.400 m², die nach oben unter rund 21 m².
+     oben greift unter rund 21 m², die nach unten je nach Dachform (siehe
+     degression_min_flach / _geneigt) ab rund 1.400 m² beim Flachdach.
 
      Abgleich (Extensivbegrünung, brutto, schlüsselfertig):
        18 m²    Modell 104–152   heygrün 118–138
@@ -841,8 +862,50 @@ const ANNAHMEN = {
      1000 m²    Modell  33– 48   Optigrün Spardach ab 27 netto = ab 32 brutto
      ------------------------------------------------------------------- */
   bezugsflaeche_m2: 100,
-  degression_min: 0.45,
   degression_max: 1.60,
+
+  /* Der Boden der Degression ist NICHT für alle Dächer derselbe.
+     Er hat zwei Ursachen, die sich unterschiedlich verhalten:
+
+       Fixkosten — Anfahrt, Kran, Aufmaß, Angebot — fallen einmal an,
+       gleich welche Form das Dach hat. Sie rechtfertigen die Degression
+       über die ganze Projektfläche.
+
+       Der Verfahrenswechsel — Substrat blasen statt sacken, Vegetation
+       als Rollmatte — braucht große zusammenhängende, ebene Flächen.
+       Auf einem Sheddach mit vierzehn einzelnen Pultflächen gibt es ihn
+       nicht.
+
+     Deshalb erreicht nur das Flachdach den tiefen Boden. Zwischen
+     beiden Werten wird nach dem Flächenanteil geneigter Teilflächen
+     interpoliert. */
+  degression_min_flach:   0.45,
+  degression_min_geneigt: 0.70,
+
+  /* --- Zuschlag für geneigte Dächer ------------------------------------
+     Ab 5 Grad rutschen Substrat und Vegetation ohne Sicherung ab; das
+     ist zugleich die Grenze, an der die Datengrundlage „flach" von
+     „geneigt" trennt. Der Zuschlag ist kein Rabattverlust, sondern
+     echte Zusatzleistung: Erosionsschutzgewebe und stabile Traufkante,
+     darüber Schubschwellen, ganz oben flächige Schubsicherungssysteme
+     und verankerte Vegetationsmatten.
+
+     Er wird NICHT degressiert — Schubschwellen sind Meterware und
+     werden mit der Fläche nicht billiger.
+
+     Anhalt: Marktangaben für Schrägdachbegrünung inkl. Einbau liegen
+     bei etwa 60–150 €/m² gegenüber 65–95 €/m² für das Flachdach bei
+     100 m². Die oberste Klasse ist am schwächsten belegt; sie betrifft
+     3,6 % der Potenzialfläche.
+
+     grad: untere Grenze der Klasse, min/max: € je m².
+     ------------------------------------------------------------------- */
+  neigungszuschlag: [
+    {grad: 0,  min: 0,  max: 0,  text:'Flachdach, keine Schubsicherung'},
+    {grad: 5,  min:10,  max:20,  text:'Erosionsschutz und Traufsicherung'},
+    {grad:15,  min:25,  max:45,  text:'flächiges Schubsicherungssystem'},
+    {grad:25,  min:40,  max:70,  text:'verankerte Vegetationsmatten'}
+  ],
 
   /* --- Förderung IFB Hamburg -------------------------------------------
      Quelle: Kapitel 2.1.4 der Arbeit nach IFB Hamburg.
@@ -936,6 +999,12 @@ L.control.scale({imperial:false}).addTo(map);
 const daten={};
 const layers={gd:null,pot:null};
 let stat=null, aktuelleFlaeche=0, aktuellerAufbau='extensiv';
+/* Der Rechner kennt seit v6.3 zwei Bezüge: die angeklickte Teilfläche und
+   die Summe aller unbegrünten Teilflächen desselben Gebäudes. Beide führen
+   neben der Fläche ihre Neigungsmischung mit — daraus folgen Zuschlag und
+   Degressionsboden. */
+let rechnerBezug='teil';
+let bezugTeil=null, bezugGebaeude=null;
 
 /* ======================================================================
    C. DARSTELLUNG DER FLÄCHEN
@@ -1138,6 +1207,7 @@ function klickPot(feat,lyr){
   if(melder.modus==='dach'){ melderNimmFlaeche(feat,lyr,'pot'); return; }
   showBox('pot');
   aktuelleFlaeche=parseFloat(p.netto_m2)||0;
+  setzeBezuege(p);
   document.getElementById('p-area').textContent=m2(aktuelleFlaeche);
   document.getElementById('p-schraeg').textContent=m2(p.schraeg_m2);
   document.getElementById('p-slope').innerHTML =
@@ -1153,6 +1223,32 @@ function klickPot(feat,lyr){
   document.getElementById('p-status').innerHTML = p.status==='begruent'
     ? badge('bereits begrünt · '+f1(p.anteil)+' %','b-akzent')
     : badge('unbegrünt','b-pot');
+
+  /* Gehört die Teilfläche zu einem Dach mit weiteren unbegrünten Flächen,
+     gehört das in die Objektdetails — sonst sieht man beim Rechnen zum
+     ersten Mal, dass es mehr gibt. */
+  const z=document.getElementById('p-gebaeude');
+  if(bezugGebaeude && bezugGebaeude.n>1){
+    z.style.display='';
+    z.querySelector('.info-val').innerHTML =
+      m2(bezugGebaeude.flaeche)+' <span style="font-weight:400;color:var(--grau)">· '
+      + bezugGebaeude.n+' Teilflächen</span>';
+  }else z.style.display='none';
+}
+
+/* Stellt die beiden Bezüge für den Rechner bereit. Die Neigungsmischung
+   der Teilfläche ist trivial — sie liegt ganz in einer Klasse. */
+function setzeBezuege(p){
+  const leer=()=>ANNAHMEN.neigungszuschlag.map(()=>0);
+  const kl=leer(); kl[neigungsklasse(p.neigung)] = aktuelleFlaeche;
+  bezugTeil={flaeche:aktuelleFlaeche, n:1, klassen:kl};
+
+  const e=p.gebaeude_id ? gebaeudeIndex.get(p.gebaeude_id) : null;
+  bezugGebaeude = (e && e.freiN>1)
+    ? {flaeche:e.frei, n:e.freiN, klassen:e.klassen.slice()}
+    : null;
+  /* Ohne zweite Teilfläche gibt es nichts zu wählen. */
+  if(!bezugGebaeude) rechnerBezug='teil';
 }
 
 /* ======================================================================
@@ -1213,7 +1309,11 @@ document.getElementById('hinweis-overlay').addEventListener('click',e=>{
    ---------------------------------------------------------------------- */
 function openRechner(){
   if(!aktuelleFlaeche){alert('Bitte zuerst eine Dachteilfläche anklicken.');return;}
+  /* Voreinstellung bleibt die angeklickte Teilfläche — der Rechner soll
+     nicht ungefragt eine größere Aussage treffen, als der Klick hergibt. */
+  rechnerBezug='teil';
   document.getElementById('r-flaeche').value=Math.round(aktuelleFlaeche);
+  zeigeBezug();
   document.getElementById('rechner-overlay').classList.add('open');
   rechne();
 }
@@ -1222,14 +1322,96 @@ document.getElementById('rechner-overlay').addEventListener('click',e=>{
   if(e.target.id==='rechner-overlay') closeRechner();
 });
 
+/* Ein Gebäude hat in der Potenzialebene mehrere Teilflächen. Zwei
+   Verwendungen, deshalb zwei Summen:
+
+     netto / gruen / n  — ALLE Teilflächen. Das ist das Dach, wie der
+                          Melder es meldet.
+     frei / freiN       — nur die UNBEGRÜNTEN. Das ist das, was der
+                          Rechner begrünen würde.
+     klassen[]          — Fläche der unbegrünten Teilflächen je
+                          Neigungsklasse, für Zuschlag und Degression.
+
+   49 % der Gebäude mit Potenzial haben mehr als eine unbegrünte
+   Teilfläche; für sie ist die Gebäudesumme die eigentlich gemeinte
+   Zahl. */
+const gebaeudeIndex = new Map();
+
+/* Index der Neigungsklasse aus ANNAHMEN.neigungszuschlag. */
+function neigungsklasse(grad){
+  const st=ANNAHMEN.neigungszuschlag;
+  let i=0;
+  for(let k=0;k<st.length;k++) if((+grad||0) >= st[k].grad) i=k;
+  return i;
+}
+
+/* Anteil geneigter Fläche (ab 5°) an einer Neigungsmischung. */
+function geneigtAnteil(klassen){
+  const summe=klassen.reduce((a,b)=>a+b,0);
+  if(!(summe>0)) return 0;
+  return (summe-klassen[0])/summe;
+}
+
+/* Flächengewichteter Zuschlag für Schubsicherung, € je m². */
+function neigungszuschlag(klassen){
+  const st=ANNAHMEN.neigungszuschlag;
+  const summe=klassen.reduce((a,b)=>a+b,0);
+  if(!(summe>0)) return {min:0,max:0};
+  let min=0,max=0;
+  klassen.forEach((a,i)=>{ min+=a*st[i].min; max+=a*st[i].max; });
+  return {min:min/summe, max:max/summe};
+}
+
 /* Preisdegression über die Projektgröße. Herleitung und Quellenabgleich:
    KOSTENBASIS.md. Gekappt, damit die Potenzfunktion weder bei 5 m² noch
-   bei 50.000 m² Werte liefert, für die es keinen Beleg gibt. */
-function groessenfaktor(flaeche, auf){
+   bei 50.000 m² Werte liefert, für die es keinen Beleg gibt. Der untere
+   Deckel hängt an der Dachform: Nur ebene, zusammenhängende Flächen
+   erreichen den Verfahrenswechsel, der ihn rechtfertigt. */
+function groessenfaktor(flaeche, auf, klassen){
   const A=ANNAHMEN;
   if(!(flaeche>0)) return 1;
-  const roh=Math.pow(A.bezugsflaeche_m2/flaeche, auf.degression);
-  return Math.min(A.degression_max, Math.max(A.degression_min, roh));
+  const g    = klassen ? geneigtAnteil(klassen) : 0;
+  const boden= A.degression_min_flach + g*(A.degression_min_geneigt-A.degression_min_flach);
+  const roh  = Math.pow(A.bezugsflaeche_m2/flaeche, auf.degression);
+  return Math.min(A.degression_max, Math.max(boden, roh));
+}
+
+function setBezug(b){
+  if(b==='gebaeude' && !bezugGebaeude) return;
+  rechnerBezug=b;
+  document.querySelectorAll('#bezug-kacheln .kachel').forEach(k=>
+    k.classList.toggle('active',k.dataset.bezug===b));
+  const q=aktuellerBezug();
+  document.getElementById('r-flaeche').value=Math.round(q.flaeche);
+  zeigeBezug();
+  rechne();
+}
+
+function aktuellerBezug(){
+  return (rechnerBezug==='gebaeude' && bezugGebaeude) ? bezugGebaeude
+       : (bezugTeil || {flaeche:aktuelleFlaeche,n:1,klassen:null});
+}
+
+function zeigeBezug(){
+  document.getElementById('bz-teil').textContent =
+    bezugTeil ? m2(bezugTeil.flaeche) : '–';
+  const knopf=document.getElementById('bz-btn-gebaeude');
+  knopf.disabled=!bezugGebaeude;
+  document.getElementById('bz-geb').textContent = bezugGebaeude
+    ? m2(bezugGebaeude.flaeche)+' · '+bezugGebaeude.n+' Teilflächen'
+    : 'keine weitere';
+  document.querySelectorAll('#bezug-kacheln .kachel').forEach(k=>
+    k.classList.toggle('active',k.dataset.bezug===rechnerBezug));
+
+  document.getElementById('bezug-hint').textContent = !bezugGebaeude
+    ? 'Dieses Gebäude hat nur eine unbegrünte Teilfläche.'
+    : rechnerBezug==='gebaeude'
+      ? 'Alle unbegrünten Teilflächen dieses Gebäudes, in einem Zug umgesetzt. '
+        + 'Nur so greifen der Größeneffekt und der Förderhöchstbetrag, der je '
+        + 'Gebäude gilt. Die Summe stammt aus dem Modell und ist nicht am '
+        + 'Luftbild geprüft.'
+      : 'Nur die angeklickte Fläche. Wer das ganze Dach in einem Zug begrünt, '
+        + 'rechnet je m² günstiger — dafür die zweite Kachel.';
 }
 
 function setAufbau(a){
@@ -1251,11 +1433,22 @@ function rechne(){
 
   if(!flaeche){ ziel.innerHTML=''; return; }
 
+  /* --- Neigungsmischung des gewählten Bezugs. Wird die Fläche von Hand
+         überschrieben, bleibt die Mischung erhalten und wird nur
+         proportional skaliert: Wer die Hälfte eines Sheddachs begrünt,
+         begrünt eine halb so große Schräge, kein Flachdach. --- */
+  const bez  = aktuellerBezug();
+  const klassen = bez.klassen
+    ? bez.klassen.map(a=>a*(flaeche/(bez.flaeche||flaeche)))
+    : null;
+
   /* --- Kosten als Spanne, auf die Projektgröße umgerechnet.
          Die Spannen in ANNAHMEN gelten für 100 m²; groessenfaktor()
          rechnet auf die eingetragene Fläche um. --- */
-  const gf   = groessenfaktor(flaeche, auf);
-  const satzMin = auf.kosten_min*gf, satzMax = auf.kosten_max*gf;
+  const gf   = groessenfaktor(flaeche, auf, klassen);
+  const zu   = klassen ? neigungszuschlag(klassen) : {min:0,max:0};
+  const satzMin = auf.kosten_min*gf + zu.min;
+  const satzMax = auf.kosten_max*gf + zu.max;
   let kMin = satzMin*flaeche;
   let kMax = satzMax*flaeche;
   /* Die PV-Unterkonstruktion ist Material von der Stange und wird mit
@@ -1304,8 +1497,10 @@ function rechne(){
      + '</span><span class="v">'+eur(kMin)+' – '+eur(kMax)+'</span></div>';
 
   h += '<div class="erg-zeile"><span class="k">Ansatz je m² bei '
-     + Math.round(flaeche).toLocaleString('de-DE')+' m² Projektgröße</span>'
-     + '<span class="v">'+eur(satzMin)+' – '+eur(satzMax)+'</span></div>';
+     + Math.round(flaeche).toLocaleString('de-DE')+' m² '
+     + (rechnerBezug==='gebaeude' && bezugGebaeude
+        ? 'auf '+bezugGebaeude.n+' Teilflächen' : 'Projektgröße')
+     + '</span><span class="v">'+eur(satzMin)+' – '+eur(satzMax)+'</span></div>';
 
   /* Der Größeneffekt wird ausgewiesen, nicht versteckt: Er ist der
      häufigste Grund dafür, dass zwei Angebote für dasselbe Dach um den
@@ -1315,6 +1510,16 @@ function rechne(){
     h += '<div class="erg-zeile"><span class="k">darin Größeneffekt gegenüber '
        + ANNAHMEN.bezugsflaeche_m2+' m² Bezugsgröße</span><span class="v">'
        + (gf<1?'− ':'+ ')+proz+' %</span></div>';
+  }
+
+  /* Der Schubzuschlag steht bewusst als eigene Zeile neben dem
+     Größeneffekt: Auf einem Sheddach arbeiten beide gegeneinander, und
+     das soll man sehen, statt es im Endbetrag zu suchen. */
+  if(zu.max>0){
+    const g=Math.round(geneigtAnteil(klassen)*100);
+    h += '<div class="erg-zeile"><span class="k">darin Schubsicherung, '
+       + g+' % der Fläche geneigt</span><span class="v">+ '
+       + eur(zu.min)+' – '+eur(zu.max)+' je m²</span></div>';
   }
 
   if(foerderfaehig && quote>0){
@@ -1378,7 +1583,13 @@ function rechne(){
      + 'und Genehmigung sind nicht enthalten; im Bestand entscheidet die '
      + 'Tragreserve über die Machbarkeit. Die Fördersätze geben den Stand der '
      + 'IFB-Richtlinie wieder, maßgeblich ist allein diese. Die Potenzialfläche '
-     + 'stammt aus dem Modell von 2022 und ist nicht am Luftbild geprüft.</span></div>';
+     + 'stammt aus dem Modell von 2022 und ist nicht am Luftbild geprüft.'
+     + (rechnerBezug==='gebaeude' && bezugGebaeude
+        ? ' Der Gebäudebezug summiert '+bezugGebaeude.n+' modellierte Teilflächen '
+          + 'und unterstellt, dass alle tragfähig sind und in einem Zug umgesetzt '
+          + 'werden — er ist damit die unsicherere der beiden Angaben.'
+        : '')
+     + '</span></div>';
 
   ziel.innerHTML=h;
 }
@@ -1440,17 +1651,20 @@ const melder = {
   markiert:[]        /* hervorgehobene Flächen der Bestandsebene */
 };
 
-/* Ein Gebäude hat in der Potenzialebene mehrere Teilflächen. Für die
-   Meldung zählt das ganze Dach, also wird einmal aufsummiert. */
-const gebaeudeIndex = new Map();
 function indexGebaeude(fc){
   if(!fc) return;
+  const leer=()=>ANNAHMEN.neigungszuschlag.map(()=>0);
   fc.features.forEach(f=>{
-    const id=f.properties.gebaeude_id; if(!id) return;
-    const e=gebaeudeIndex.get(id)||{netto:0,gruen:0,n:0};
-    e.netto += (+f.properties.netto_m2||0);
-    e.gruen += (+f.properties.gruen_m2||0);
+    const p=f.properties, id=p.gebaeude_id; if(!id) return;
+    const e=gebaeudeIndex.get(id)||{netto:0,gruen:0,n:0,frei:0,freiN:0,klassen:leer()};
+    const a=+p.netto_m2||0;
+    e.netto += a;
+    e.gruen += (+p.gruen_m2||0);
     e.n++;
+    if(p.status!=='begruent'){
+      e.frei += a; e.freiN++;
+      e.klassen[neigungsklasse(p.neigung)] += a;
+    }
     gebaeudeIndex.set(id,e);
   });
 }
@@ -1752,7 +1966,7 @@ function melderMeldung(){
       ortsquelle: melder.quelle==='gezeichnet'
         ? 'selbst eingezeichnet' : 'Dachflächen Hamburg (angeklickt)',
       gebaeude_id: melder.gebaeudeId,
-      erfasst_mit: 'Wilhelmsburger Gründach-Atlas v6.2'
+      erfasst_mit: 'Wilhelmsburger Gründach-Atlas v6.3'
     }
   };
 }

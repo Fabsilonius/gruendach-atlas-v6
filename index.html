@@ -429,11 +429,11 @@ body{
   <!-- Legende: wechselt mit der Ebene. -->
   <div class="section" id="sec-legende-gd">
     <div class="section-title">Begrünungsgrad</div>
-    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-5)"></div>Hoch — ab 75 %<span class="legend-count" id="lg-hoch"></span></div>
-    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-4)"></div>Mittel — 50 bis 75 %<span class="legend-count" id="lg-mittel"></span></div>
-    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3)"></div>Gering — 20 bis 50 %<span class="legend-count" id="lg-gering"></span></div>
-    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3);border:1px dashed var(--kontur-gruendach)"></div>visuell bestätigt, ohne Messung<span class="legend-count" id="lg-geprueft"></span></div>
-    <div class="legend-item"><div class="legend-swatch" style="background:var(--hell)"></div>nicht bewertbar<span class="legend-count" id="lg-teil"></span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-5)"></div>Hoch — ab 75 %</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-4)"></div>Mittel — 50 bis 75 %</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3)"></div>Gering — 20 bis 50 %</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3);border:1px dashed var(--kontur-gruendach)"></div>visuell bestätigt, ohne Messung</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--hell)"></div>nicht bewertbar</div>
     <div class="section-note">Der Begrünungsgrad stammt aus dem Modell. Bei visuell
       ergänzten Dächern liegt keine Messung vor — sie sind als Gründach belegt, aber
       ohne Flächenanteil. Erfahrungsgemäß liegen sie überwiegend zwischen 25 und 50 %.</div>
@@ -1275,10 +1275,6 @@ function zeigeStatistik(){
        vor und wäre als Gebietssumme irreführend. */
     document.getElementById('s-ha').textContent=
       (dach/10000).toFixed(2).replace('.',',')+' ha';
-    ['hoch','mittel','gering','geprueft'].forEach(k=>{
-      const el=document.getElementById('lg-'+k); if(el) el.textContent=z[k];
-    });
-    document.getElementById('lg-teil').textContent=z.unklar;
     if(stat&&stat.bestand&&stat.bestand[jahr])
       document.getElementById('s-geb').textContent=
         (stat.bestand[jahr].gepruefte_gebaeude||0).toLocaleString('de-DE');

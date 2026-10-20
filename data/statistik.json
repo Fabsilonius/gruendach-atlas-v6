@@ -1,37 +1,37 @@
 {
-  "version": "5.5",
+  "version": "6.4",
   "grundlage": "Modelllauf build_wga_v5.py + visuelle Nachkartierung",
   "bestand": {
     "2022": {
-      "gruendaecher": 227,
+      "gruendaecher": 222,
       "gepruefte_gebaeude": 9051,
       "nicht_bewertbar": 11,
-      "gruendach_dachflaeche_ha": 13.11,
-      "vegetation_ha": 5.9,
+      "gruendach_dachflaeche_ha": 12.89,
+      "vegetation_ha": 5.84,
       "vegetation_ha_bezug": {
-        "objekte": 194,
+        "objekte": 193,
         "hinweis": "nur modellbestätigte Objekte; für handkartierte Ergänzungen liegt keine Flächenmessung vor"
       },
       "herkunft": {
         "modell_bestaetigt": 185,
-        "haendisch_ergaenzt": 32,
-        "modell_ungeprueft": 9,
+        "haendisch_ergaenzt": 28,
+        "modell_ungeprueft": 8,
         "stichprobe_gefunden": 1
       }
     },
     "2024": {
-      "gruendaecher": 236,
+      "gruendaecher": 233,
       "gepruefte_gebaeude": 9078,
       "nicht_bewertbar": 12,
-      "gruendach_dachflaeche_ha": 13.55,
-      "vegetation_ha": 5.8,
+      "gruendach_dachflaeche_ha": 13.44,
+      "vegetation_ha": 5.78,
       "vegetation_ha_bezug": {
-        "objekte": 205,
+        "objekte": 204,
         "hinweis": "nur modellbestätigte Objekte; für handkartierte Ergänzungen liegt keine Flächenmessung vor"
       },
       "herkunft": {
-        "modell_bestaetigt": 198,
-        "haendisch_ergaenzt": 28,
+        "modell_bestaetigt": 197,
+        "haendisch_ergaenzt": 26,
         "modell_ungeprueft": 9,
         "stichprobe_gefunden": 1
       }
@@ -52,13 +52,13 @@
     "verfahren": "Flaechenmaßstab 2022 fortgeschrieben: Bestandsflaeche 2022 + belegte Zugaenge - belegte Abgaenge. Die Direktmessung 2024 ist wegen der Belaubung nicht mit 2022 vergleichbar.",
     "gesamtdachflaeche_ha": 668.2,
     "gesamtdachflaeche_quelle": "WGA_v5/build/dachflaechen_whb_2layer.parquet, Layer Roof + detail-terrace_Roof, 204.309 Teilflaechen, 2D-Flaeche",
-    "bestand_2022_ha": 5.9,
+    "bestand_2022_ha": 5.84,
     "zugang_ha": 0.29,
     "abgang_ha": 0.0,
-    "fortgeschrieben_2024_ha": 6.19,
-    "direktmessung_2024_ha": 5.81,
-    "anteil_gesamtdach_2022_prozent": 0.88,
-    "anteil_gesamtdach_2024_fortgeschrieben_prozent": 0.93,
+    "fortgeschrieben_2024_ha": 6.13,
+    "direktmessung_2024_ha": 5.78,
+    "anteil_gesamtdach_2022_prozent": 0.87,
+    "anteil_gesamtdach_2024_fortgeschrieben_prozent": 0.92,
     "belaubungsdrift": {
       "identische_objekte": 179,
       "flaeche_2022_ha": 5.72,
@@ -67,29 +67,29 @@
       "hinweis": "gleiche Gebaeude, keine reale Veraenderung; misst allein den Effekt belaubt/unbelaubt"
     },
     "einschraenkungen": [
-      "Flaechenmessung liegt nur fuer modellbestaetigte Objekte vor: 194 von 227 (2022), 205 von 236 (2024). Die Werte sind Untergrenzen.",
+      "Flaechenmessung liegt nur fuer modellbestaetigte Objekte vor: 193 von 222 (2022), 204 von 233 (2024). Die Werte sind Untergrenzen.",
       "Der eine Abgang 2024 ist haendisch ergaenzt und ohne Flaechenmessung; er geht mit 0,0 ha in die Bilanz ein.",
       "Vergleichswert Hamburg Wasser (Datenstand Februar 2025, Auswertungsgebiet Misch- und Regenwassersiele): Wilhelmsburg in der untersten Klasse 0,0-1,6 %."
     ]
   },
   "vollstaendigkeit": {
     "2022": {
-      "im_atlas": 227,
+      "im_atlas": 222,
       "geschaetzt_uebersehen": 30,
       "intervall_95": [
         1,
         165
       ],
-      "quote_prozent": 88.3
+      "quote_prozent": 88.1
     },
     "2024": {
-      "im_atlas": 236,
+      "im_atlas": 233,
       "geschaetzt_uebersehen": 30,
       "intervall_95": [
         1,
         166
       ],
-      "quote_prozent": 88.7
+      "quote_prozent": 88.6
     }
   },
   "parameter": {
@@ -115,9 +115,9 @@
     "flach": 8111,
     "geneigt": 6809,
     "aus_alkis_fallback": 404,
-    "bereits_begruent": 310,
+    "bereits_begruent": 309,
     "netto_ha": 354.3,
-    "freie_netto_ha": 344.2,
+    "freie_netto_ha": 344.3,
     "alkis_stand": "2026",
     "hinweis": "Modellstand, nicht nachkartiert",
     "breitenfilter_m": 2.0,

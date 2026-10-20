@@ -1,4 +1,4 @@
-# Wilhelmsburger Gründach-Atlas — Version 6.3
+# Wilhelmsburger Gründach-Atlas — Version 6.4
 
 Interaktive Karte zum Gründachbestand und zum Begrünungspotenzial auf der
 Elbinsel Wilhelmsburg (Masterthesis, Fabian Schlag).

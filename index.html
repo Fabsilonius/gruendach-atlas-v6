@@ -434,9 +434,6 @@ body{
     <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3)"></div>Gering — 20 bis 50 %</div>
     <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-3);border:1px dashed var(--kontur-gruendach)"></div>visuell bestätigt, ohne Messung</div>
     <div class="legend-item"><div class="legend-swatch" style="background:var(--hell)"></div>nicht bewertbar</div>
-    <div class="section-note">Der Begrünungsgrad stammt aus dem Modell. Bei visuell
-      ergänzten Dächern liegt keine Messung vor — sie sind als Gründach belegt, aber
-      ohne Flächenanteil. Erfahrungsgemäß liegen sie überwiegend zwischen 25 und 50 %.</div>
   </div>
 
   <div class="section" id="sec-legende-pot" style="display:none">
@@ -444,9 +441,6 @@ body{
     <div class="legend-item"><div class="legend-swatch" style="background:var(--potenzial)"></div>unbegrünt — Flachdach<span class="legend-count" id="lp-flach"></span></div>
     <div class="legend-item"><div class="legend-swatch" style="background:var(--potenzial-tint);border-color:var(--potenzial-kontur)"></div>unbegrünt — geneigt<span class="legend-count" id="lp-geneigt"></span></div>
     <div class="legend-item"><div class="legend-swatch" style="background:var(--rampe-5)"></div>bereits begrünt<span class="legend-count" id="lp-begruent"></span></div>
-    <div class="section-note">Potenzial auf einzelnen Dachteilflächen, weil Neigung und
-      Ausrichtung erst auf dieser Ebene vorliegen. Aufbauten sind bereits abgezogen.
-      Diese Ebene ist reiner Modellstand und visuell nicht nachkartiert.</div>
   </div>
 
   <div class="section">
@@ -529,54 +523,39 @@ body{
     <div class="hinweis">
 
       <p><strong>Datengrundlage.</strong> Dachgeometrie durchgehend aus Dachflächen
-      Hamburg; für Gebäude ohne Entsprechung — Neubauten nach dessen Stichtag — tritt
-      der ALKIS-Umriss an ihre Stelle. Welche Gebäude im jeweiligen Jahr existieren,
-      legt der ALKIS-Stand fest (April 2022, Juli 2024, für das Potenzial 2026).
-      Gartenlauben sind ausgeschlossen, da sie den Aufbau einer Begrünung statisch
-      nicht tragen. Dachvegetation: eigenes Segmentierungsmodell (U-Net,
-      EfficientNet-B3) auf Orthophotos, 20 cm. Als Dachfläche zählen die Kategorien
-      <em>Roof</em> und <em>detail-terrace_Roof</em>, dazu <em>detail_Roof</em>, soweit
-      die Teilfläche Mindestgröße und Formfilter erfüllt; Schornsteine, Gauben,
-      Attiken und Lichtkuppeln sind ausgenommen.</p>
+      Hamburg, für Gebäude ohne entsprechende Einträge dort tritt der ALKIS-Umriss an
+      ihre Stelle. Welche Gebäude im jeweiligen Jahr existieren, legt der ALKIS-Stand
+      fest (April 2022, Juli 2024, für das Potenzial 2026). Gartenlauben sind
+      ausgeschlossen, da sie den Aufbau einer Begrünung statisch nicht tragen. Als
+      Dachfläche zählen die Kategorien <em>Roof</em> und <em>detail-terrace_Roof</em>,
+      dazu <em>detail_Roof</em>, soweit die Teilfläche Mindestgröße und Formfilter
+      erfüllt. Schornsteine, Gauben, Attiken und Lichtkuppeln sind ausgenommen.</p>
 
-      <p><strong>Wie der Bestand zustande kommt.</strong> Das Modell schlägt Gründächer
-      vor, jeder Vorschlag wurde am Luftbild einzeln geprüft. Der Atlas zeigt nur, was
-      diese Prüfung bestätigt hat — 28,7 % der maschinellen Vorschläge mussten
-      korrigiert werden. Der Jahrgang 2024 ist keine eigene Erhebung, sondern aus dem
-      geprüften Stand 2022 fortgeschrieben: Ein Dach fällt nur mit belegtem Rückbau aus
-      dem Bestand und kommt nur mit Beleg hinzu. Dächer, die 2024 unter Bäumen oder im
-      Schatten liegen, bleiben daher enthalten. Kartierregeln nach LUP/SenUVK Berlin
-      2020.</p>
+      <p><strong>Wie der Bestand zustande kommt.</strong> Ein KI-Modell schlägt
+      Gründächer vor, jeder Vorschlag wurde am Luftbild einzeln geprüft. Der Atlas
+      zeigt nur, was diese Prüfung bestätigt hat — 28,7 % der maschinellen Vorschläge
+      mussten korrigiert werden. Der Jahrgang 2024 ist keine eigene Erhebung, sondern
+      aus dem geprüften Stand 2022 fortgeschrieben: Ein Dach fällt nur mit belegtem
+      Rückbau aus dem Bestand und kommt nur mit Beleg hinzu. Dächer, die 2024 unter
+      Bäumen oder im Schatten liegen, bleiben daher enthalten.</p>
 
       <p><strong>Vollständigkeit.</strong> Eine Zufallsstichprobe von 300 nicht
       erkannten Gebäuden ergab zwei übersehene Gründächer. Hochgerechnet fehlen dem
-      Atlas rund 60 Objekte, überwiegend kleine Dächer unter 50 m²; er erfasst damit
+      Atlas rund 60 Objekte, überwiegend kleine Dächer unter 50 m², er erfasst damit
       etwa vier Fünftel des Bestands.</p>
-
-      <p><strong>Zur Veränderung.</strong> Zwischen 2022 und 2024 sind zehn Zugänge
-      belegt — neun Entwicklungen im Bestand und ein Neubau mit Gründach.
-      Modelldifferenzen zwischen Bildjahrgängen sind grundsätzlich nicht als reale
-      Entwicklung zu lesen.</p>
 
       <p><strong>Zum Potenzial.</strong> Die Potenzialebene liegt auf einzelnen
       Dachteilflächen, weil Neigung und Ausrichtung erst dort vorliegen. Sie ist
-      reiner Modellstand und wurde — anders als der Bestand — nicht visuell
-      nachkartiert; als Hintergrund dient deshalb das Luftbild 2026, das dem
-      ALKIS-Stand dieser Ebene entspricht. Aufbauten sind rechnerisch abgezogen.
-      Zusätzlich entfallen Teilflächen, die nirgends <strong>2 m breit</strong>
-      sind: Traufkanten, Grate und schmale Reste zwischen zwei Neigungswechseln
-      erreichen zwar die Mindestgröße von 20 m², tragen aber keinen Aufbau, der
-      Randanschluss, Wartungsweg und Vegetationsfläche unterbringt. Das betrifft
+      reiner Modellstand und wurde nicht visuell nachkartiert, als Hintergrund dient
+      deshalb das Luftbild 2026, das dem ALKIS-Stand dieser Ebene entspricht.
+      Aufbauten und Teilflächen, die nirgends 2 m breit sind, entfallen. Das betrifft
       765 der ursprünglich 15.685 Teilflächen (4,9 %, zusammen 3,6 ha). Statik,
-      Dachzustand und Nutzungskonflikte kann das Verfahren nicht beurteilen; eine
-      als geeignet ausgewiesene Fläche ist ein Hinweis, keine Zusage.</p>
+      Dachzustand und Nutzungskonflikte kann das Verfahren nicht beurteilen, eine als
+      geeignet ausgewiesene Fläche ist lediglich als ein Hinweis zu lesen.</p>
 
       <p><strong>Zu den Zahlen.</strong> Als Gründach gilt eine Fläche ab 20 m² Größe.
       Der Begrünungsgrad stammt aus dem Modell und liegt nur für maschinell erkannte
-      Dächer vor. Die Bestandszahlen beziehen sich auf ganze Gebäude, die
-      Potenzialflächen auf einzelne Dachteile — beide Zahlen sind nicht unmittelbar
-      gegeneinander aufzurechnen. Aus diesem Grund lassen sich beide Ebenen in dieser
-      Anwendung auch nicht gleichzeitig einschalten.</p>
+      Dächer vor.</p>
 
     </div>
   </div>

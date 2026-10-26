@@ -1544,7 +1544,7 @@ function rechne(){
        + ' im Jahr</strong> und deckt damit <strong>'+Math.round(deckung)+' %</strong> '
        + 'des Pflegemehraufwands gegenüber einem Schwarzdach. ';
     h += jahresSaldo>=0
-      ? 'Unterm Strich bleibt ein jährlicher Vorteil von '+eur(jahresSaldo)+'. '
+      ? 'Insgesamt bleibt ein jährlicher Vorteil von '+eur(jahresSaldo)+'. '
       : 'Es verbleiben '+eur(-jahresSaldo)+' Mehrkosten im Jahr. ';
     h += 'Über '+ANNAHMEN.zeitraum_jahre+' Jahre summiert sich die Ersparnis auf '
        + eur(gebuehrSpar*ANNAHMEN.zeitraum_jahre)+'. Der wirtschaftliche Kern liegt '
@@ -1558,7 +1558,7 @@ function rechne(){
      + 'und Genehmigung sind nicht enthalten; im Bestand entscheidet die '
      + 'Tragreserve über die Machbarkeit. Die Fördersätze geben den Stand der '
      + 'IFB-Richtlinie wieder, maßgeblich ist allein diese. Die Potenzialfläche '
-     + 'stammt aus dem Modell von 2022 und ist nicht am Luftbild geprüft.'
+     + 'stammt aus dem Datensatz Dachflächen Hamburgs und ist nicht am Luftbild geprüft.'
      + (rechnerBezug==='gebaeude' && bezugGebaeude
         ? ' Der Gebäudebezug summiert '+bezugGebaeude.n+' modellierte Teilflächen '
           + 'und unterstellt, dass alle tragfähig sind und in einem Zug umgesetzt '
